@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -File \"C:/Users/<TU_USUARIO>/.claude/hooks/lint-check.ps1\"",
+            "timeout": 30,
+            "statusMessage": "Lint (ruff/npm)..."
+          }
+        ]
+      }
+    ]
+  }
+}
