@@ -1,142 +1,166 @@
 # claude-code-config
 
-Configuración personal de [Claude Code](https://code.claude.com) a nivel de
-usuario (`~/.claude/`), pensada para aplicarse igual en cualquier máquina.
-Sirve como referencia y como forma de sincronizar la config entre ordenadores
-(este repo no contiene nada de ningún proyecto concreto — solo reglas
-generales de flujo de trabajo, skills y hooks).
+Configuración personal de [Claude Code](https://code.claude.com) a nivel de usuario
+(`~/.claude/`), pensada para aplicarse igual en cualquier máquina. Sirve como referencia y como
+forma de sincronizar la configuración entre ordenadores. No contiene nada de ningún proyecto
+concreto: solo reglas de flujo de trabajo, skills, hooks y permisos.
+
+Lo común a todas las máquinas está separado de lo que depende de cada una: `CLAUDE.md` importa
+al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 
 ## Qué hay aquí
 
-| Archivo/carpeta | Va a | Qué es |
+| Fichero o carpeta | Va a | Qué es |
 |---|---|---|
-| `CLAUDE.md` | `~/.claude/CLAUDE.md` | Memoria de usuario: entorno (shell/SO), reglas de git/ramas/worktrees, estilo de código, verificación antes de dar algo por bueno |
-| `skills/audit/` | `~/.claude/skills/audit/` | `/audit` — auditoría de un repo con tabla de criticidad, sin editar nada |
-| `skills/deploy-pi/` | `~/.claude/skills/deploy-pi/` | `/deploy-pi` — despliega y exige verificación en vivo con evidencia real |
-| `agents/repo-auditor.md` | `~/.claude/agents/repo-auditor.md` | Subagente de solo lectura (sin Edit/Write) para explorar/auditar repos en paralelo sin gastar el contexto principal |
-| `hooks/lint-check.ps1` | `~/.claude/hooks/lint-check.ps1` | Script que corre `ruff check`/`npm run lint` tras cada edición, de forma informativa (no bloqueante) |
-| `settings/hooks.snippet.json` | fusionar dentro de `~/.claude/settings.json` | El bloque `"hooks"` que registra el script anterior como hook `PostToolUse` |
+| `CLAUDE.md` | `~/.claude/CLAUDE.md` | Reglas comunes: antes de escribir código, alcance, verificación, git, estilo, texto, comunicación. Termina importando `machine.md` |
+| `machines/personal.md` | `~/.claude/machine.md` | Máquina personal: Windows 10 y PowerShell, sin Node, Raspberry Pi por SSH, GitHub con `claude/*` y PR |
+| `machines/deloitte.md` | `~/.claude/machine.md` | Máquina corporativa: PowerShell 5.1, Group Policy que bloquea `.ps1` y `npm`, proxy TLS, VPN, Git Credential Manager, OneDrive |
+| `docs/ways-of-working.md` | (solo lectura) | El porqué de cada regla: principios, piezas, sesión, flujo, verificación, git con agentes, hooks, y qué se descarta |
+| `skills/audit/` | `~/.claude/skills/audit/` | `/audit`: auditoría de un repo con tabla de criticidad, sin editar nada |
+| `skills/deploy-pi/` | `~/.claude/skills/deploy-pi/` | `/deploy-pi`: despliega a la Pi y exige verificación en vivo con evidencia real |
+| `agents/repo-auditor.md` | `~/.claude/agents/repo-auditor.md` | Subagente de solo lectura para explorar y auditar repos sin gastar el contexto principal |
+| `hooks/lint-check.py` | `~/.claude/hooks/` | `PostToolUse`: lint del fichero recién editado (ruff o eslint del repo), informativo, sub-segundo |
+| `hooks/session-start-status.py` | `~/.claude/hooks/` | `SessionStart`: rama, sucio o limpio, worktree o checkout principal, distancia a `origin`. No hace pull |
+| `hooks/block-commit-on-protected.py` | `~/.claude/hooks/` | `PreToolUse`: deniega `git commit` en la rama protegida (`origin/HEAD`, o `main`/`master`) |
+| `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los tres scripts |
+| `settings/permissions.snippet.json` | fusionar en `~/.claude/settings.json` | Lista curada de permisos: `allow` para lo de solo lectura, `ask` para lo que sale de la máquina, `deny` para lo irreversible y los secretos |
+| `ruff.toml` | (solo este repo) | Para que el hook de lint pase sobre los propios hooks al editarlos aquí |
 
 ## Instalación en una máquina nueva (Windows)
 
-```powershell
-git clone <url-de-este-repo> claude-code-config
-cd claude-code-config
+Desde Git Bash o desde `cmd`, que funcionan en las dos máquinas (en la corporativa Group Policy
+bloquea los `.ps1`, así que no hay script de instalación en PowerShell a propósito):
 
-Copy-Item CLAUDE.md ~/.claude/CLAUDE.md -Force
-Copy-Item -Recurse skills/* ~/.claude/skills/ -Force
-Copy-Item -Recurse agents/* ~/.claude/agents/ -Force
-New-Item -ItemType Directory -Force ~/.claude/hooks | Out-Null
-Copy-Item hooks/lint-check.ps1 ~/.claude/hooks/lint-check.ps1 -Force
+```bash
+git clone https://github.com/jaguirrepeman/claude-code-config.git
+cd claude-code-config
+mkdir -p ~/.claude/skills ~/.claude/agents ~/.claude/hooks
+cp CLAUDE.md ~/.claude/CLAUDE.md
+cp machines/personal.md ~/.claude/machine.md     # o machines/deloitte.md
+cp -r skills/* ~/.claude/skills/
+cp agents/* ~/.claude/agents/
+cp hooks/*.py ~/.claude/hooks/
 ```
 
-Luego **fusiona a mano** (no sobrescribas) el contenido de
-`settings/hooks.snippet.json` dentro de `~/.claude/settings.json` — sustituye
-`<TU_USUARIO>` por el usuario real de esa máquina en la ruta del comando. Si
-`~/.claude/settings.json` no existe todavía, puedes copiarlo tal cual y
-renombrarlo.
+Luego **fusiona a mano** (no sobrescribas) `settings/hooks.snippet.json` y
+`settings/permissions.snippet.json` dentro de `~/.claude/settings.json`. Si no existe, puedes
+juntar los dos bloques en un fichero nuevo. Si `~/.claude/settings.json` ya tiene `hooks` o
+`permissions`, añade las entradas dentro de las listas existentes.
 
-Requisitos del hook: Windows PowerShell (`powershell.exe`, viene de fábrica).
-No hace falta `pwsh` (PowerShell Core) ni `jq`. Si el hook no encuentra
-`ruff`/`npm`, simplemente no hace nada — es no bloqueante por diseño.
+Requisitos de los hooks: `python` en el PATH (3.10 o superior). Los comandos usan `$HOME`, que
+Claude Code expande en el shell con el que lanza los hooks; si en la primera sesión no aparece el
+informe de estado del repo, sustituir `$HOME` por la ruta absoluta del perfil. Si un hook no
+encuentra ruff, eslint o git, no hace nada: los tres fallan abiertos por diseño.
 
-## Por qué esto es así (contexto)
+Para comprobar que están activos: abrir una sesión en cualquier repo y ver que aparece "Estado
+del repo" al arrancar.
 
-- El hook usa `powershell -NoProfile -File <ruta>` en vez de `-Command "..."`
-  para evitar problemas de escapado de comillas anidadas entre el shell que
-  envuelve el hook (bash/cmd/PowerShell, según la máquina) y PowerShell.
-- El script `.ps1` siempre termina en `exit 0`: es informativo, nunca debe
-  bloquear una edición aunque el lint encuentre errores.
-- `CLAUDE.md` asume que la máquina de desarrollo es Windows y que el destino
-  de despliegue (si lo hay) es Linux por SSH — ajusta esa sección si tu
-  entorno es distinto.
+## Por qué esto es así
 
----
+- **Hooks en Python y no en PowerShell.** Group Policy bloquea los `.ps1` en la máquina
+  corporativa y Python está en las dos. El `lint-check.ps1` anterior además imprimía a stdout,
+  que en `PostToolUse` no llega al modelo; la versión en Python devuelve el aviso como
+  `additionalContext`, que es lo que hace que Claude lo vea y lo arregle.
+- **Lint del fichero, no del repo.** `ruff check .` sobre un repo grande tarda segundos y un hook
+  que tarda se acaba apagando. Sobre un fichero es sub-segundo.
+- **Los tres hooks fallan abiertos, devuelven la salida del fallo y nunca salen con error.** Son
+  las tres reglas de diseño de `docs/ways-of-working.md`, sección 7. Cualquier hook nuevo las
+  sigue.
+- **El bloqueo de commit es de sesión, no de servidor.** Impide que una sesión de Claude Code
+  commitee en la rama protegida; no impide hacerlo a mano. Para eso está la protección de rama
+  del remoto. Se puede fijar la rama con `CLAUDE_PROTECTED_BRANCHES=main,release`.
+- **En un repo que ya tiene sus propios hooks de proyecto** (`.claude/settings.json`), los
+  globales corren también. Un aviso de estado repetido es inofensivo; si molesta, se quita el del
+  proyecto o el global, no los dos.
+- **El commit no está en `ask`, a propósito.** Es local y se deshace. Lo que para de verdad es
+  que nada salga de la máquina sin que lo veas: `push`, `merge`, `pr create`.
 
-## Resumen: buenas prácticas de Claude Code (investigado 2026-09)
+## Skills: criterio de admisión
 
-Notas de referencia, con fuentes oficiales. No todo lo de aquí está aplicado
-arriba — al final hay una lista de "lo que falta y conviene añadir".
+Una skill se justifica solo si se cumplen las tres:
+
+1. El procedimiento se ha repetido **al menos tres veces**, con evidencia (commits, actas,
+   `/insights`), no por intuición.
+2. Tiene **pasos que se olvidan o se hacen distinto cada vez**. Un procedimiento que nadie hace
+   mal no necesita skill.
+3. **Mantenerla cuesta menos que repetirla.** Envolver un comando de una línea no aporta nada.
+
+Y se descarta lo que ya cubre una regla de `CLAUDE.md` o de `.claude/rules/`, porque eso se
+carga solo y una skill encima sería la misma información en dos sitios. Una regla ("diagnóstico
+antes de arreglo") es una línea en `CLAUDE.md`; una skill es un procedimiento con pasos.
+
+| Skill | Qué resuelve | Por qué existe |
+|---|---|---|
+| `audit` | Auditoría de solo lectura con tabla de criticidad y plan priorizado, antes de tocar código | Se pedía en cada repo nuevo con pasos distintos cada vez |
+| `deploy-pi` | Deploy a la Pi con verificación en vivo obligatoria | El paso que se saltaba era la verificación con evidencia real |
+
+Candidatas descartadas: convenciones de commit y ramas (regla, no procedimiento), verificación
+con lint y tests (un comando, ya en `CLAUDE.md`), revisión de código (`/code-review` del harness
+ya lo cubre).
+
+## Buenas prácticas de Claude Code (notas de referencia, 2026-09)
+
+Con fuentes oficiales. No todo está aplicado arriba; al final, lo que falta.
 
 ### CLAUDE.md
 
-- **Qué incluir**: comandos no obvios, convenciones de estilo que difieren
-  del default, flujo de trabajo específico del repo, "gotchas" (p. ej. "no
-  hay Node en esta máquina"), decisiones de arquitectura que no se infieren
-  del código, variables de entorno necesarias.
-- **Qué NO incluir**: obviedades ("escribe código limpio"), documentación de
-  librerías (mejor un link), listados de archivos que Claude ya puede
-  descubrir solo, tutoriales largos (eso es un skill, no memoria).
-- **Tamaño**: la señal de que algo no pertenece ahí es "si borro esta línea,
-  ¿Claude comete el mismo error otra vez?" — si no, fuera.
-- **Precedencia** (de más general a más específico): managed policy → user
-  (`~/.claude/CLAUDE.md`) → project (`.claude/CLAUDE.md` o `./CLAUDE.md`) →
-  local (`CLAUDE.local.md`, gitignored) → anidados por subcarpeta.
-- **Imports**: `@ruta/al/fichero.md` para dividir por tema
-  (`@.claude/rules/deployment.md`); se cargan al inicio de sesión igual, no
-  "ahorran" contexto, solo organizan.
+- **Qué incluir**: comandos no obvios, convenciones de estilo que difieren del default, flujo de
+  trabajo específico del repo, "gotchas" (por ejemplo "no hay Node en esta máquina"), decisiones
+  de arquitectura que no se infieren del código, variables de entorno necesarias.
+- **Qué no incluir**: obviedades ("escribe código limpio"), documentación de librerías (mejor un
+  enlace), listados de ficheros que Claude ya puede descubrir solo, tutoriales largos (eso es una
+  skill, no memoria).
+- **Tamaño**: la señal de que algo no pertenece ahí es "si borro esta línea, ¿Claude comete el
+  mismo error otra vez?". Si no, fuera. Menos de 200 líneas.
+- **Precedencia** (de más general a más específico): managed policy, user (`~/.claude/CLAUDE.md`),
+  project (`./CLAUDE.md`), local (`CLAUDE.local.md`, gitignored), anidados por subcarpeta.
+- **Imports**: `@ruta/al/fichero.md` para dividir por tema; se cargan al inicio de sesión igual,
+  no ahorran contexto, solo organizan. Es lo que usa este repo para `machine.md`.
 - Fuentes: [memory.md](https://code.claude.com/docs/en/memory.md),
   [large-codebases.md](https://code.claude.com/docs/en/large-codebases.md)
 
-### Skills (`.claude/skills/*/SKILL.md`)
+### Skills
 
-- Frontmatter soportado: `name`, `description` (crítico para que Claude lo
-  auto-invoque sin que lo pidas explícitamente), `disable-model-invocation`
-  (solo invocable a mano con `/nombre`), `user-invocable`, `allowed-tools`,
-  `disallowed-tools`, `arguments` (positional, `$0`/`$1`/`$nombre` además de
-  `$ARGUMENTS`), `context: fork` (aislado en subagente), `model`, `paths`
-  (glob para activar solo en ciertos ficheros).
-- **Inyección dinámica**: una línea `` !`comando` `` (o un bloque ```` ```! ````)
-  ejecuta el comando ANTES de que Claude vea el skill y sustituye la salida
-  inline. Un exit code distinto de 0 aborta el skill entero — hay que ser
-  cuidadoso con comandos que puedan fallar (ver `audit`/`deploy-pi` arriba,
-  usan `2>/dev/null || true`/`|| echo ...` para no abortar).
-- User (`~/.claude/skills/`) vs project (`.claude/skills/`, commiteado, para
-  el equipo) vs plugin (distribuido por marketplace).
-- Fuentes: [skills.md](https://code.claude.com/docs/en/skills.md)
+- Frontmatter: `name`, `description` (crítico para que Claude la elija sola),
+  `disable-model-invocation` (solo a mano con `/nombre`), `user-invocable`, `allowed-tools`,
+  `context: fork` (corre en subagente aislado), `model`, `paths` (glob para activar solo en
+  ciertos ficheros).
+- **Inyección dinámica**: una línea `` !`comando` `` ejecuta el comando antes de que Claude vea la
+  skill y sustituye la salida. Un exit code distinto de 0 aborta la skill entera: usar
+  `2>/dev/null || true` en comandos que puedan fallar.
+- User (`~/.claude/skills/`) frente a project (`.claude/skills/`, para el equipo) frente a plugin.
+- Fuente: [skills.md](https://code.claude.com/docs/en/skills.md)
 
-### Hooks (`settings.json`)
+### Hooks
 
-- Eventos: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `SessionStart`,
-  `Stop`, `PreCompact`/`PostCompact`, `PermissionRequest`, `Notification`,
-  `ConfigChange`, entre otros.
-- Tipos de hook: `command` (shell), `prompt` (evalúa con un LLM rápido),
-  `agent` (corre un subagente con tools — puede leer archivos, ejecutar
-  comandos, y bloquear con lógica real, no solo un exit code), `http`,
-  `mcp_tool`.
-- **No bloquear por accidente**: un hook informativo debe acabar siempre en
-  `exit 0` (o devolver JSON sin `continue: false`). El campo `"if"` permite
-  filtrar cuándo corre el hook sin gastar un proceso de más.
-- **Seguridad**: nunca credenciales en claro dentro de un hook, nunca `sudo`
-  sin contexto explícito, cuidado con interpolar variables de entorno sin
-  validar.
-- Fuentes: [hooks-guide.md](https://code.claude.com/docs/en/hooks-guide.md),
-  referencia completa de hooks en la doc de `settings.json`.
+- Eventos: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `SessionStart`, `Stop`,
+  `PreCompact`, `PostCompact`, `PermissionRequest`, `Notification`, `ConfigChange`.
+- Tipos: `command` (shell), `prompt` (evalúa con un modelo rápido), `agent` (subagente con
+  herramientas, puede bloquear con lógica real), `http`, `mcp_tool`.
+- **No bloquear por accidente**: un hook informativo acaba siempre en exit 0. Para que Claude vea
+  la salida de un `PostToolUse`, JSON con `hookSpecificOutput.additionalContext`; el stdout suelto
+  solo va al transcript. `SessionStart` es la excepción: su stdout entra en el contexto.
+- **Seguridad**: nunca credenciales en claro dentro de un hook, cuidado con interpolar variables
+  de entorno sin validar.
+- Fuente: [hooks-guide.md](https://code.claude.com/docs/en/hooks-guide.md)
 
-### Otras funcionalidades con las que vale la pena familiarizarse
+### Otras piezas
 
-- **Subagentes** (`~/.claude/agents/*.md`, o `.claude/agents/` de proyecto):
-  definen un rol reutilizable (frontmatter `name`, `description`, `tools`,
-  opcionalmente `model`) invocable por nombre desde el Agent tool. Sirven para
-  explorar/auditar en paralelo sin ensuciar el contexto principal — es lo que
-  usa este repo con `repo-auditor.md`.
-- **Workflows/routines**: tareas recurrentes programadas (cron en la nube) o
-  bucles (`/loop`) sin tener que reabrir sesión cada vez.
-- **Permisos granulares en `settings.json`** (`permissions.allow`/`deny`):
-  reduce prompts repetidos para comandos de solo lectura de uso frecuente
-  (`git *`, `pytest`, etc.) sin abrir la puerta a todo.
+- **Subagentes** (`~/.claude/agents/*.md`): un rol reutilizable con `name`, `description`,
+  `tools`. Compensa guardarlo cuando es el mismo papel en muchos proyectos; en un repo de equipo
+  pequeño, pedirlo con una frase hace lo mismo.
+- **`/insights`**: informe HTML sobre las últimas sesiones (proyectos, fricciones, sugerencias de
+  reglas y skills). Es la revisión periódica de "qué se ha repetido" hecha sola.
+- **`/fewer-permission-prompts`**: escanea las transcripciones y propone la lista `allow` con
+  evidencia, en vez de acumular clics.
 
-### Lo que falta y conviene añadir (siguiente paso, no aplicado todavía)
+### Lo que falta y conviene añadir
 
-1. **Un hook `Stop` de tipo `agent`** que verifique antes de terminar un turno
-   de deploy que tests/lint pasaron y que hay evidencia real pegada — esto es
-   un cambio de comportamiento real (puede alargar/bloquear turnos), así que
-   antes de activarlo hay que decidirlo explícitamente, no meterlo por
-   defecto.
-2. **Permisos granulares** en `settings.json` para los comandos de solo
-   lectura que se repiten en cada sesión (`git status`, `git branch -vv`,
-   `git log`) y así reducir prompts de aprobación.
-3. Revisar si conviene mover parte de las reglas de flujo de git/worktrees a
-   un `.claude/rules/*.md` con `paths:` en los repos donde solo aplican a una
-   subcarpeta (monorepos), en vez de repetirlas en cada `CLAUDE.md` de
-   proyecto.
+1. **Un hook `Stop` de tipo `agent`** que verifique antes de terminar un turno de deploy que
+   tests y lint pasaron y que hay evidencia real pegada. Cambia el comportamiento (puede
+   bloquear turnos), así que se decide explícitamente, no se mete por defecto.
+2. **Hook `PreToolUse` sobre `git push`** que corra la verificación del repo antes de dejar
+   salir el código. Escrito y activo en un repo de equipo; generalizarlo pide saber cuál es el
+   comando de verificación de cada repo (convención: `scripts/check.py` o leerlo de `CLAUDE.md`).
+3. Mover reglas de flujo que solo aplican a una subcarpeta a `.claude/rules/*.md` con `paths:`
+   en los monorepos, en vez de repetirlas en cada `CLAUDE.md`.

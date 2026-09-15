@@ -1,10 +1,10 @@
 ---
 name: audit
-description: Auditoría profunda de un repo con plan de fixes priorizado por criticidad. Úsalo cuando el usuario pida "haz un audit", "audita el repo", "análisis crítico" o similar — antes de tocar ningún código.
+description: Auditoría profunda de un repo con plan de fixes priorizado por criticidad. Úsalo cuando el usuario pida "haz un audit", "audita el repo", "análisis crítico" o similar, antes de tocar ningún código.
 user-invocable: true
 ---
 
-# /audit — Auditoría profunda + plan priorizado
+# /audit: auditoría profunda y plan priorizado
 
 Fase 1 de un contrato en dos fases (ver también `/ship` si existe, o la
 implementación manual tras aprobación). **No edites nada en esta fase.**
@@ -21,7 +21,7 @@ git branch -vv 2>/dev/null | grep -i "gone" || true
 git worktree list 2>/dev/null
 ```
 
-Usa esto como punto de partida de la sección de higiene del repo — no vuelvas
+Usa esto como punto de partida de la sección de higiene del repo; no vuelvas
 a pedir `git status`/`git branch` al usuario, ya lo tienes arriba.
 
 ## Qué revisar
@@ -44,7 +44,7 @@ a pedir `git status`/`git branch` al usuario, ya lo tienes arriba.
 No especules. Para cada hallazgo candidato:
 - Ejecuta el código/test real que lo demuestre (no asumas por lectura).
 - Si es una rama "huérfana", confirma con `git merge-base --is-ancestor <rama> <base>`
-  antes de proponer borrarla — nunca la marques huérfana solo por el `[gone]`
+  antes de proponer borrarla; nunca la marques huérfana solo por el `[gone]`
   de `git branch -vv` sin comprobar que de verdad está fusionada.
 - Si toca datos reales del usuario, dilo explícitamente y no lo ejecutes sin permiso.
 
