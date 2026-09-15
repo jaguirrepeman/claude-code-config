@@ -1,14 +1,37 @@
 {
   "hooks": {
-    "PostToolUse": [
+    "SessionStart": [
       {
-        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -File \"C:/Users/<TU_USUARIO>/.claude/hooks/lint-check.ps1\"",
+            "command": "python \"$HOME/.claude/hooks/session-start-status.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$HOME/.claude/hooks/block-commit-on-protected.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$HOME/.claude/hooks/lint-check.py\"",
             "timeout": 30,
-            "statusMessage": "Lint (ruff/npm)..."
+            "statusMessage": "Lint del fichero editado..."
           }
         ]
       }
