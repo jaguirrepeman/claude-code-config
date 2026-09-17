@@ -18,32 +18,40 @@ al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 | `docs/ways-of-working.md` | (solo lectura) | El porqué de cada regla: principios, piezas, sesión, flujo, verificación, git con agentes, hooks, y qué se descarta |
 | `skills/audit/` | `~/.claude/skills/audit/` | `/audit`: auditoría de un repo con tabla de criticidad, sin editar nada |
 | `skills/deploy-pi/` | `~/.claude/skills/deploy-pi/` | `/deploy-pi`: despliega a la Pi y exige verificación en vivo con evidencia real |
+| `skills/refute/` | `~/.claude/skills/refute/` | `/refute [criterio]`: segunda opinión en contexto limpio. Lanza al subagente `verifier` contra el diff actual y devuelve un veredicto con pruebas; no arregla nada |
 | `agents/repo-auditor.md` | `~/.claude/agents/repo-auditor.md` | Subagente de solo lectura para explorar y auditar repos sin gastar el contexto principal |
+| `agents/verifier.md` | `~/.claude/agents/verifier.md` | Subagente verificador: intenta refutar un cambio ya hecho, ejecuta la verificación del repo y recalcula por otro camino. Es el "revisor independiente" de `docs/ways-of-working.md`, sección 5.2 |
 | `hooks/lint-check.py` | `~/.claude/hooks/` | `PostToolUse`: lint del fichero recién editado (ruff o eslint del repo), informativo, sub-segundo |
 | `hooks/session-start-status.py` | `~/.claude/hooks/` | `SessionStart`: rama, sucio o limpio, worktree o checkout principal, distancia a `origin`. No hace pull |
 | `hooks/block-commit-on-protected.py` | `~/.claude/hooks/` | `PreToolUse`: deniega `git commit` en la rama protegida (`origin/HEAD`, o `main`/`master`) |
-| `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los tres scripts |
+| `hooks/pre-push-verify.py` | `~/.claude/hooks/` | `PreToolUse`: antes de un `git push` ejecuta el comando de `.claude/verify-command` del repo y deniega el push si falla. Sin ese fichero no hace nada |
+| `hooks/tests/` | (solo este repo) | Tests de los cuatro hooks: `pytest -q hooks/tests`. Cada hook se ejecuta como proceso aparte con JSON por stdin, igual que lo lanza Claude Code |
+| `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los cuatro scripts |
 | `settings/permissions.snippet.json` | fusionar en `~/.claude/settings.json` | Lista curada de permisos: `allow` para lo de solo lectura, `ask` para lo que sale de la máquina, `deny` para lo irreversible y los secretos |
+| `templates/project/` | copiar a la raíz de cada repo | Plantilla de `.claude/` para un repo: `settings.json`, regla por ruta de zonas calientes, `verify-command` y el trozo de `.gitignore`. Ver su README |
+| `docs/optimizacion-2026-09.md` | (solo lectura) | Auditoría de septiembre de 2026 de los cuatro repos: hallazgos con evidencia, recomendaciones contrastadas con la documentación oficial, qué se aplicó y qué queda pendiente de decidir |
+| `install.sh` | (solo este repo) | `sh install.sh` copia todo a `~/.claude`; `sh install.sh --check` dice qué difiere entre el repo y la máquina (drift) |
 | `ruff.toml` | (solo este repo) | Para que el hook de lint pase sobre los propios hooks al editarlos aquí |
+| `.github/workflows/ci.yml` | (solo este repo) | `ruff check`, `ruff format --check` y los tests de los hooks en cada PR |
 
-## Instalación en una máquina nueva (Windows)
+## Instalación en una máquina nueva
 
-Desde Git Bash o desde `cmd`, que funcionan en las dos máquinas (en la corporativa Group Policy
-bloquea los `.ps1`, así que no hay script de instalación en PowerShell a propósito):
+Desde Git Bash (Windows) o cualquier shell en Linux. En la máquina corporativa Group Policy
+bloquea los `.ps1`, así que el instalador es `sh` a propósito:
 
 ```bash
 git clone https://github.com/jaguirrepeman/claude-code-config.git
 cd claude-code-config
-mkdir -p ~/.claude/skills ~/.claude/agents ~/.claude/hooks
-cp CLAUDE.md ~/.claude/CLAUDE.md
-cp machines/personal.md ~/.claude/machine.md     # o machines/deloitte.md
-cp -r skills/* ~/.claude/skills/
-cp agents/* ~/.claude/agents/
-cp hooks/*.py ~/.claude/hooks/
+sh install.sh --machine personal     # o --machine deloitte
 ```
 
-Luego **fusiona a mano** (no sobrescribas) `settings/hooks.snippet.json` y
-`settings/permissions.snippet.json` dentro de `~/.claude/settings.json`. Si no existe, puedes
+Copia `CLAUDE.md`, el `machine.md` que toque, `skills/`, `agents/` y `hooks/*.py` a `~/.claude/`.
+Para saber si la máquina se ha quedado atrás respecto al repo (o al revés, si se editó algo en
+`~/.claude` sin subirlo): `sh install.sh --check`, que lista `igual`, `DIFIERE` o `FALTA` por
+fichero y sale con 1 si hay drift.
+
+El instalador **no toca `~/.claude/settings.json`**: fusiona a mano (no sobrescribas)
+`settings/hooks.snippet.json` y `settings/permissions.snippet.json` dentro de él. Si no existe, puedes
 juntar los dos bloques en un fichero nuevo. Si `~/.claude/settings.json` ya tiene `hooks` o
 `permissions`, añade las entradas dentro de las listas existentes.
 
@@ -53,7 +61,8 @@ informe de estado del repo, sustituir `$HOME` por la ruta absoluta del perfil. S
 encuentra ruff, eslint o git, no hace nada: los tres fallan abiertos por diseño.
 
 Para comprobar que están activos: abrir una sesión en cualquier repo y ver que aparece "Estado
-del repo" al arrancar.
+del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este repo:
+`pytest -q hooks/tests`.
 
 ## Por qué esto es así
 
@@ -74,6 +83,14 @@ del repo" al arrancar.
   proyecto o el global, no los dos.
 - **El commit no está en `ask`, a propósito.** Es local y se deshace. Lo que para de verdad es
   que nada salga de la máquina sin que lo veas: `push`, `merge`, `pr create`.
+- **La verificación se exige en el push, no en cada turno.** Un `Stop` hook que verifica en cada
+  respuesta tarda segundos y se acaba apagando (probado). El push pasa pocas veces al día y es
+  cuando el código llega al CI o a otra persona. Cada repo declara su comando en
+  `.claude/verify-command`; sin él, el hook calla. `CLAUDE_SKIP_VERIFY=1` lo apaga para una
+  sesión, para un push consciente de emergencia.
+- **`/deploy-pi` lleva `disable-model-invocation: true`.** Desplegar tiene efectos fuera de la
+  máquina; lo lanza la persona con `/deploy-pi`, nunca el modelo por su cuenta. Es lo que la
+  documentación recomienda para skills con efectos secundarios.
 
 ## Skills: criterio de admisión
 
@@ -93,6 +110,7 @@ antes de arreglo") es una línea en `CLAUDE.md`; una skill es un procedimiento c
 |---|---|---|
 | `audit` | Auditoría de solo lectura con tabla de criticidad y plan priorizado, antes de tocar código | Se pedía en cada repo nuevo con pasos distintos cada vez |
 | `deploy-pi` | Deploy a la Pi con verificación en vivo obligatoria | El paso que se saltaba era la verificación con evidencia real |
+| `refute` | Segunda opinión en contexto limpio: un subagente que no escribió el cambio intenta refutarlo y devuelve pruebas | La revisión con contexto limpio se pedía con una frase distinta cada vez y sin criterio; la skill fija el procedimiento, el formato y que no arregle nada |
 
 Candidatas descartadas: convenciones de commit y ramas (regla, no procedimiento), verificación
 con lint y tests (un comando, ya en `CLAUDE.md`), revisión de código (`/code-review` del harness
@@ -156,11 +174,13 @@ Con fuentes oficiales. No todo está aplicado arriba; al final, lo que falta.
 
 ### Lo que falta y conviene añadir
 
-1. **Un hook `Stop` de tipo `agent`** que verifique antes de terminar un turno de deploy que
-   tests y lint pasaron y que hay evidencia real pegada. Cambia el comportamiento (puede
-   bloquear turnos), así que se decide explícitamente, no se mete por defecto.
-2. **Hook `PreToolUse` sobre `git push`** que corra la verificación del repo antes de dejar
-   salir el código. Escrito y activo en un repo de equipo; generalizarlo pide saber cuál es el
-   comando de verificación de cada repo (convención: `scripts/check.py` o leerlo de `CLAUDE.md`).
-3. Mover reglas de flujo que solo aplican a una subcarpeta a `.claude/rules/*.md` con `paths:`
-   en los monorepos, en vez de repetirlas en cada `CLAUDE.md`.
+Lo que estaba aquí en la versión anterior (hook sobre `git push`, reglas por ruta) ya está hecho:
+`hooks/pre-push-verify.py` y `templates/project/.claude/rules/`. Lo que queda, con su motivo y
+su coste, está en `docs/optimizacion-2026-09.md`, sección "Pendiente de decisión". Resumen:
+
+1. **Hook `Stop` de tipo `agent`** que compruebe antes de cerrar un turno de deploy que hay
+   evidencia real pegada. Cambia el comportamiento (puede bloquear turnos): se decide a mano.
+2. **Revisión automática de PR con la Claude Code GitHub Action** (`/install-github-app`).
+   Gasta cuota en cada PR; se activa por repo y con `--max-turns`, o no se activa.
+3. **Job `auto-merge` en `atril`**, como en `finance` e `idealista_bot`. Un merge despliega,
+   así que es una decisión de producción, no de configuración.
