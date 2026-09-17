@@ -1,0 +1,5 @@
+# Artefactos de Python: los hooks se ejecutan como scripts y no dejan nada que versionar
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
