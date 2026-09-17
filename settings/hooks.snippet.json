@@ -21,6 +21,17 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$HOME/.claude/hooks/pre-push-verify.py\"",
+            "timeout": 600,
+            "statusMessage": "Verificación del repo antes del push..."
+          }
+        ]
       }
     ],
     "PostToolUse": [
