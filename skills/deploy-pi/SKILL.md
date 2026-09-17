@@ -2,6 +2,7 @@
 name: deploy-pi
 description: Despliega la rama actual al Raspberry Pi de este proyecto y verifica en vivo con evidencia real. Úsalo cuando el usuario pida "despliega a la Pi", "sube esto a producción" o "verifica que está en producción" en un repo que se auto-hospeda en el Pi.
 user-invocable: true
+disable-model-invocation: true
 ---
 
 # /deploy-pi: deploy al Raspberry Pi y verificación en vivo
