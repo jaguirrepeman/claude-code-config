@@ -38,7 +38,8 @@
     "deny": [
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
-      "Bash(gh pr merge --auto:*)",
+      "Bash(gh pr merge *--auto*)",
+      "Bash(gh pr merge --auto*)",
       "Read(.env*)",
       "Read(**/.env*)",
       "Read(**/secrets/**)",

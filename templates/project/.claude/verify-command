@@ -1,0 +1,4 @@
+# Comando de verificación completa del repo. Lo ejecuta hooks/pre-push-verify.py antes de cada
+# `git push` y bloquea el push si termina con exit distinto de 0. Una sola línea de comando;
+# el resto son comentarios. Debe ser el mismo comando que documenta CLAUDE.md.
+cd backend && poetry run ruff check . && poetry run pytest -q
