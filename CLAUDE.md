@@ -51,6 +51,9 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
   actualizarlas en el mismo cambio.
 - Lo que se ve en una app o en un navegador se verifica ahí, corriendo, no leyendo el código.
 - Verificar contra `origin/<rama>`, no contra la copia local: `fetch` primero.
+- **Segunda opinión en contexto limpio** antes de dar por bueno un cambio en zona caliente, un
+  diff grande o el cierre de una sesión larga: `/refute` con el criterio de aceptación. Lo que
+  devuelva se arregla como cambio nuevo con su diff, no dentro del mismo turno.
 
 ## Git
 
@@ -90,6 +93,9 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
 - Python: `ruff check` y `pytest -q` (o lo que use el repo) en local antes de cada push. Que no
   lo descubra el CI si se puede correr aquí. El hook global de lint tras cada edición es
   informativo; esto es la comprobación deliberada.
+- El hook `pre-push-verify` ejecuta el comando de `.claude/verify-command` del repo antes de
+  cada `git push` y bloquea el push si falla. Se arregla lo que falla; no se desactiva el hook
+  ni se saltan tests para pasar.
 
 ## Contexto
 
