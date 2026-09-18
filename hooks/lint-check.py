@@ -16,8 +16,10 @@ Tres decisiones de diseño:
 
 1. **Nunca bloquea.** Es informativo. Un hook que bloquea ediciones por lint acaba apagado.
 2. **Falla abierto.** Si no encuentra ruff, ni eslint, ni el fichero, ni el repo, no dice nada.
-3. **Usa el linter del repo, no uno global.** Primero `.venv/Scripts/ruff.exe` (o `bin/ruff`),
-   luego el `ruff` del PATH. Nunca `uvx`, que descargaría algo en mitad de una edición.
+3. **Usa el linter del repo, no uno global.** Primero `.venv/Scripts/ruff.exe` (o `bin/ruff`)
+   junto al `pyproject.toml` más cercano, que es donde `uv sync` deja el venv (en la raíz o en
+   `backend/`); luego el `ruff` del PATH. Nunca `uvx` ni `uv run`, que descargarían o
+   sincronizarían algo en mitad de una edición.
 
 Formato de entrada y salida contrastados contra https://code.claude.com/docs/en/hooks.
 Nunca sale con error: un problema aquí no puede impedir trabajar.

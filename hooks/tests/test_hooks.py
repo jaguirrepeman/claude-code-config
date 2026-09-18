@@ -193,6 +193,35 @@ def test_lint_ignores_non_code_files(tmp_path: Path) -> None:
     assert (code, out) == (0, "")
 
 
+UV_PYPROJECT = '[project]\nname = "demo"\nversion = "0"\n\n[tool.ruff.lint]\nselect = ["F"]\n'
+
+
+@needs_ruff
+@pytest.mark.parametrize("project_dir", ["", "backend"])
+def test_lint_uses_the_repo_venv_created_by_uv(tmp_path: Path, project_dir: str) -> None:
+    # `uv sync` deja el venv en `.venv` junto al pyproject (en la raíz o en `backend/`), y ruff
+    # como binario dentro. El hook tiene que usar ese ruff, no uno global: se vacía el PATH y
+    # se copia el ruff real dentro del venv simulado. Sin venv y sin PATH, calla (falla abierto).
+    project = tmp_path / project_dir if project_dir else tmp_path
+    (project / "app").mkdir(parents=True)
+    (project / "pyproject.toml").write_text(UV_PYPROJECT, encoding="utf-8")
+    bad = project / "app" / "bad.py"
+    bad.write_text("import os\n", encoding="utf-8")
+    no_ruff_in_path = {"PATH": str(tmp_path / "empty-bin")}
+    (tmp_path / "empty-bin").mkdir()
+
+    code, out = run_hook("lint-check.py", edit(bad), tmp_path, no_ruff_in_path)
+    assert (code, out) == (0, "")
+
+    venv_ruff = project / ".venv" / ("Scripts/ruff.exe" if os.name == "nt" else "bin/ruff")
+    venv_ruff.parent.mkdir(parents=True)
+    shutil.copy(shutil.which("ruff"), venv_ruff)
+    code, out = run_hook("lint-check.py", edit(bad), tmp_path, no_ruff_in_path)
+    assert code == 0
+    context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    assert "F401" in context and "bad.py" in context
+
+
 # --- pre-push-verify ------------------------------------------------------------------------
 
 

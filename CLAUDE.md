@@ -88,11 +88,27 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
 - Los comentarios explican el porqué, no el qué.
 - Nunca timers falsos ni mockeados en tests async: han colgado CI. Timeouts reales y cortos.
 
+## Entornos Python
+
+- **uv es el único gestor.** Nada de Poetry, pipx ni `pip install` a mano; un repo con dos
+  gestores tiene dos verdades y una está desactualizada.
+- `pyproject.toml` estándar: `[project]` y `[dependency-groups]`, sin `[tool.poetry]`.
+  `requires-python` es exactamente lo que exige el destino de despliegue, y `.python-version`
+  por repo lo fija (`uv python pin`).
+- **`uv.lock` committeado es la única fuente de verdad de las dependencias.** Se instala con
+  `uv sync --locked` en CI y en despliegue, para que un lock desactualizado falle en vez de
+  resolverse en silencio. Sin `requirements.txt` a mano; si algo lo necesita, `uv export` desde
+  el lock, y se regenera, no se edita.
+- Dev en el grupo `dev` de `[dependency-groups]`; en producción, `uv sync --locked --no-dev`.
+- En CI, `astral-sh/setup-uv` con `version` fijada (la misma que en local) y `enable-cache`.
+- Los comandos del repo van con `uv run` (`uv run pytest -q`, `uv run ruff check .`): así corren
+  en el `.venv` del repo, nunca en uno global.
+
 ## Comprobaciones antes de pushear
 
-- Python: `ruff check` y `pytest -q` (o lo que use el repo) en local antes de cada push. Que no
-  lo descubra el CI si se puede correr aquí. El hook global de lint tras cada edición es
-  informativo; esto es la comprobación deliberada.
+- Python: `uv run ruff check .` y `uv run pytest -q` (o lo que use el repo) en local antes de
+  cada push. Que no lo descubra el CI si se puede correr aquí. El hook global de lint tras cada
+  edición es informativo; esto es la comprobación deliberada.
 - El hook `pre-push-verify` ejecuta el comando de `.claude/verify-command` del repo antes de
   cada `git push` y bloquea el push si falla. Se arregla lo que falla; no se desactiva el hook
   ni se saltan tests para pasar.

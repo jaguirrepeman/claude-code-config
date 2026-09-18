@@ -1,8 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(poetry run pytest *)",
-      "Bash(poetry run ruff *)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff *)",
+      "Bash(uv sync *)",
       "Bash(npm test *)",
       "Bash(npm run build *)"
     ]
