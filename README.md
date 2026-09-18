@@ -30,6 +30,8 @@ al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 | `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los cuatro scripts |
 | `settings/permissions.snippet.json` | fusionar en `~/.claude/settings.json` | Lista curada de permisos: `allow` para lo de solo lectura, `ask` para lo que sale de la máquina, `deny` para lo irreversible y los secretos |
 | `templates/project/` | copiar a la raíz de cada repo | Plantilla de `.claude/` para un repo: `settings.json`, regla por ruta de zonas calientes, `verify-command` y el trozo de `.gitignore`. Ver su README |
+| `templates/project/.claude/skills/pr-gate/` | `.claude/skills/pr-gate/` del repo | Skill que revisa cada PR antes del auto-merge con lo que un test genérico no ve en ese repo (zona caliente con su test, la app arranca, contratos). La ejecuta el job `review` del CI y su veredicto `block` para el merge. Se adapta la sección "Qué comprobar" |
+| `templates/project/.github/workflows/ci-gate.snippet.yml` | pegar en `ci.yml` del repo | Los jobs `review` y `auto-merge` del gate, y el `ready_for_review` del disparador. Sin el secreto `CLAUDE_CODE_OAUTH_TOKEN` el job `review` se salta y el gate son los tests |
 | `docs/optimizacion-2026-09.md` | (solo lectura) | Auditoría de septiembre de 2026 de los cuatro repos: hallazgos con evidencia, recomendaciones contrastadas con la documentación oficial, qué se aplicó y qué queda pendiente de decidir |
 | `install.sh` | (solo este repo) | `sh install.sh` copia todo a `~/.claude`; `sh install.sh --check` dice qué difiere entre el repo y la máquina (drift) |
 | `ruff.toml` | (solo este repo) | Para que el hook de lint pase sobre los propios hooks al editarlos aquí |
@@ -92,6 +94,34 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
 - **`/deploy-pi` lleva `disable-model-invocation: true`.** Desplegar tiene efectos fuera de la
   máquina; lo lanza la persona con `/deploy-pi`, nunca el modelo por su cuenta. Es lo que la
   documentación recomienda para skills con efectos secundarios.
+
+## Gate de auto-merge: nadie revisa a mano
+
+Decisión de 2026-09-18: en todos los repos propios, un PR se fusiona solo cuando su CI está en
+verde y nadie lo lee en el ordenador. Lo que tenga que comprobarse va en un test o en la skill
+`pr-gate` del repo, que ejecuta la GitHub Action de Claude como job `review` antes del
+`auto-merge`. Tres piezas, todas en `templates/project/`:
+
+- **`ready_for_review` en el disparador.** GitHub no lo incluye por defecto: un PR abierto en
+  draft y marcado luego como listo no relanzaba el CI, y el `auto-merge` de la última ejecución
+  ya había decidido "saltar" viéndolo como draft. Así se quedaron PR en verde sin fusionarse en
+  finance e idealista_bot.
+- **Job `review`.** Ejecuta `/pr-gate` con `anthropics/claude-code-action@v1` autenticada con el
+  secreto `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token` en local, y `gh secret set
+  CLAUDE_CODE_OAUTH_TOKEN` en cada repo). Sin el secreto, el paso se salta y el job pasa: el
+  gate se queda en los tests. La action falla con actores bot, así que dependabot no pasa por
+  Claude. La skill escribe `/tmp/pr-gate-verdict.json`; un paso posterior lo comenta en el PR y
+  falla el job solo con `verdict: block`. Sin veredicto (la revisión no terminó), pasa: la
+  revisión no puede dejar un repo atascado por un fallo suyo.
+- **`auto-merge` con `always()`.** Depende de `review`; como `review` se salta en dependabot y
+  un job saltado en `needs` saltaría también este, cada dependencia se comprueba una a una en
+  la condición. Al añadir un job de verificación hay que añadirlo a `needs` y a la condición.
+
+Lo que la skill comprueba es distinto en cada repo y vive en el repo, no aquí: en finance, que
+un refactor no mueva un céntimo y que la API arranque; en atril, chordpro y aligner con su
+fixture y la cuenta única de Spotify; en idealista_bot, extractor y valoración con un anuncio
+concreto y que la API arranque; en koboannotations, que nada se borre en el almacén ni en
+Notion; en gymapp, sin tests, datos del usuario y RLS en Supabase.
 
 ## Skills: criterio de admisión
 

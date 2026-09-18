@@ -313,6 +313,13 @@ tocan CI de los proyectos y no despliegan nada.
 
 ## 6. Pendiente de decisión
 
+Actualización 2026-09-18: A1 (job `auto-merge` en `atril`) ya estaba hecho (PR #21 de atril) y
+4.5 (revisión automática de PR) se ha decidido que sí: job `review` con la skill `pr-gate` en
+los cinco repos, con el secreto `CLAUDE_CODE_OAUTH_TOKEN` como interruptor. Ver "Gate de
+auto-merge" en el README. Además, la rama `claude/optimize-claude-code-repo-3dunjq` de este
+informe se había quedado sin abrir como PR en los tres repos; se abrió y fusionó ese día.
+
+
 | # | Qué | Qué hay que decidir | Coste si se hace |
 |---|---|---|---|
 | A1 | Job `auto-merge` en `atril` | Que un PR en verde se fusione y **despliegue solo** en la Pi, como en `finance` | Un job de CI (YAML abajo); ninguna cuota |
