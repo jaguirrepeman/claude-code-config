@@ -358,6 +358,32 @@ añadirlo a `needs`, o falla y el PR se fusiona igual.
           --squash --delete-branch
 ```
 
+### 6.2 Entornos Python: uv, una sola fuente de verdad por repo (decidido el 2026-09-18)
+
+Auditoría de cómo gestionaba cada repo su entorno, el 2026-09-18:
+
+| Repo | Estado encontrado |
+|---|---|
+| finance, atril | Poetry con lock al día, pero `pipx install poetry` sin versión fijada en el CI y metadatos `[tool.poetry]` obsoletos en el `pyproject.toml` |
+| idealista_bot | Tres fuentes de verdad: `pyproject.toml` de Poetry, `poetry.lock` desactualizado y dos `requirements.txt` escritos a mano que divergían entre sí |
+| koboannotations | Sin lock: `pip install -r requirements.txt` con rangos, ejecutado cada día en un cron, así que cada día podía instalar algo distinto |
+
+Tres formas distintas de hacer lo mismo, y en dos de ellas lo que se instalaba no era lo que decía
+el fichero que se leía. Decisión: **uv como único gestor**, con la regla escrita en la sección
+"Entornos Python" del `CLAUDE.md` común (pyproject estándar, `uv.lock` committeado y usado con
+`--locked` en CI y en despliegue, `.python-version` por repo, sin `requirements.txt` a mano,
+versión de uv fijada en CI, dev en grupo aparte y `--no-dev` en producción). La plantilla
+`templates/project/` ya está en uv (`settings.json`, `verify-command`, `ci-gate.snippet.yml`,
+`pr-gate`), y el hook `lint-check.py` tiene test que fija que usa el ruff del `.venv` que crea
+`uv sync`, en la raíz o en `backend/`. Hay tareas abiertas para migrar cada repo de proyecto.
+
+**Aviso: el pyproject global de la raíz.** Fuera de todo repo existe
+`D:\JESUS\PROYECTOS_PYTHON\pyproject.toml` con su `poetry.lock` ("Global Poetry Environment for
+multiple Python projects"), un entorno compartido antiguo. Un `uv` o `poetry` ejecutado en un
+repo sin `pyproject.toml` sube de directorio y lo encuentra, con lo que instalaría o resolvería
+contra ese entorno sin avisar. No es de este repo y no se toca desde aquí: borrarlo (o moverlo
+fuera del árbol de los repos) es decisión de la persona, una vez migrados los repos.
+
 ## 7. Cómo mantener esto
 
 - Cada mes: `/insights`, `/doctor` en cada repo, `sh install.sh --check` en cada máquina.
