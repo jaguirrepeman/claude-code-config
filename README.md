@@ -25,6 +25,7 @@ al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 | `hooks/lint-check.py` | `~/.claude/hooks/` | `PostToolUse`: lint del fichero recién editado (ruff o eslint del repo), informativo, sub-segundo |
 | `hooks/session-start-status.py` | `~/.claude/hooks/` | `SessionStart`: rama, sucio o limpio, worktree o checkout principal, distancia a `origin`. No hace pull |
 | `hooks/block-commit-on-protected.py` | `~/.claude/hooks/` | `PreToolUse`: deniega `git commit` en la rama protegida (`origin/HEAD`, o `main`/`master`) |
+| `hooks/_target_dir.py` | `~/.claude/hooks/` | Ayuda de los dos hooks anteriores: el repo que se mira es aquel al que va el comando (`cd ../otro && git ...`, `git -C ../otro ...`), no el `cwd` de la sesión |
 | `hooks/pre-push-verify.py` | `~/.claude/hooks/` | `PreToolUse`: antes de un `git push` ejecuta el comando de `.claude/verify-command` del repo y deniega el push si falla. Sin ese fichero no hace nada |
 | `hooks/tests/` | (solo este repo) | Tests de los cuatro hooks: `pytest -q hooks/tests`. Cada hook se ejecuta como proceso aparte con JSON por stdin, igual que lo lanza Claude Code |
 | `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los cuatro scripts |

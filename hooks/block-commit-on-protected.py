@@ -36,6 +36,8 @@ import subprocess
 import sys
 from typing import Any
 
+from _target_dir import target_dir
+
 TIMEOUT_GIT = 5
 
 # `git commit` con cualquier flag, y también dentro de un comando compuesto
@@ -92,8 +94,9 @@ def main() -> None:
     if not isinstance(command, str) or not GIT_COMMIT.search(command):
         return
 
-    # El repo que importa es el del directorio en el que se iba a ejecutar el comando.
-    cwd = payload.get("cwd") or None
+    # El repo que importa es aquel en el que va a correr el comando, que puede no ser el de la
+    # sesión (`cd ../otro && git ...`, `git -C ../otro ...`).
+    cwd = target_dir(command, payload.get("cwd") or None)
     branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
     if branch is None:
         # No se pudo determinar la rama: se deja pasar, nunca se bloquea por un fallo de detección.

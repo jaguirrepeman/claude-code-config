@@ -98,6 +98,48 @@ def test_commit_hook_fails_open_outside_git(tmp_path: Path) -> None:
     assert (code, out) == (0, "")
 
 
+@pytest.fixture
+def other_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Segundo repo, en una rama de trabajo, para comandos que van a otro directorio."""
+    root = tmp_path_factory.mktemp("other")
+    git("init", "-q", "-b", "main", cwd=root)
+    git("config", "user.email", "test@example.com", cwd=root)
+    git("config", "user.name", "Test", cwd=root)
+    (root / "a.txt").write_text("a\n", encoding="utf-8")
+    git("add", "a.txt", cwd=root)
+    git("commit", "-q", "-m", "init", cwd=root)
+    git("checkout", "-q", "-b", "claude/x", cwd=root)
+    return root
+
+
+def test_commit_looks_at_cd_target_not_session_cwd(repo: Path, other_repo: Path) -> None:
+    # La sesión está en `main` de un repo, pero el commit va a la rama de trabajo de otro:
+    # mirar el cwd de la sesión daba un falso bloqueo.
+    cmd = f'cd "{other_repo}" && git add a.txt && git commit -m x'
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_commit_looks_at_git_C_target(repo: Path, other_repo: Path) -> None:
+    cmd = f'git -C "{other_repo}" commit -m x'
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_commit_blocked_when_cd_target_is_on_main(repo: Path, other_repo: Path) -> None:
+    # Y al revés: la sesión en una rama de trabajo, el commit a un repo que está en main.
+    cmd = f'cd "{repo}" && git commit -m x'
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, other_repo), other_repo)
+    assert code == 0
+    assert decision(out) == "deny"
+
+
+def test_cd_to_missing_dir_falls_back_to_session_cwd(repo: Path) -> None:
+    cmd = "cd /no/existe && git commit -m x"
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+    assert decision(out) == "deny"
+
+
 # --- session-start-status -------------------------------------------------------------------
 
 
@@ -177,6 +219,15 @@ def test_push_allowed_when_verification_passes(repo: Path) -> None:
 def test_push_allowed_without_verify_file(repo: Path) -> None:
     code, out = run_hook("pre-push-verify.py", bash("git push", repo), repo)
     assert (code, out) == (0, "")
+
+
+def test_push_verifies_cd_target_repo(repo: Path, other_repo: Path) -> None:
+    # La sesión no tiene verify-command; el repo al que va el push sí, y falla: se bloquea.
+    write_verify(other_repo, f'"{PYTHON}" -c "import sys; print(\'rojo\'); sys.exit(3)"')
+    code, out = run_hook("pre-push-verify.py", bash(f'cd "{other_repo}" && git push', repo), repo)
+    assert code == 0
+    assert decision(out) == "deny"
+    assert "rojo" in json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_push_hook_ignores_other_commands(repo: Path) -> None:
