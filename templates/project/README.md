@@ -11,7 +11,8 @@ sustituye al `CLAUDE.md` del proyecto, lo complementa.
 | `.claude/verify-command` | El comando de verificación completa del repo, una línea. Lo lee `hooks/pre-push-verify.py` antes de cada `git push` | Sí |
 | `gitignore.snippet` | Lo que se añade al `.gitignore` del repo: lo personal de `.claude/` fuera de git, lo compartido dentro | No |
 | `.claude/skills/pr-gate/SKILL.md` | Revisión propia del repo antes del auto-merge. La ejecuta el job `review` del CI con la GitHub Action de Claude; su veredicto `block` para el merge | Sí: la sección "Qué comprobar en este repo", con comandos y resultado esperado |
-| `.github/workflows/ci-gate.snippet.yml` | Los jobs `review` y `auto-merge` del gate y el `ready_for_review` del disparador, para pegar en `ci.yml` | Sí: `needs` y los pasos de setup del job `review` |
+| `.github/workflows/ci-gate.snippet.yml` | Los jobs `review` y `auto-merge` del gate y el `ready_for_review` del disparador, para pegar en `ci.yml`. Trae el setup de uv de ejemplo (`astral-sh/setup-uv` con versión fijada y `uv sync --locked --dev`) | Sí: `needs`, la versión de uv y el directorio del `pyproject.toml` |
+| `.python-version` y `uv.lock` | No están en la plantilla porque los genera uv en el repo (`uv python pin <versión>` y `uv lock`), pero forman parte del estándar y van versionados: el primero fija el intérprete (el mismo que exige el destino de despliegue) y el segundo es la única fuente de verdad de las dependencias, la que usan `uv sync --locked` en CI y en la Pi. Sin `requirements.txt` a mano; si algo lo necesita, `uv export` desde el lock | Sí: la versión de Python |
 
 Reglas que se aplican al usar la plantilla:
 
@@ -22,6 +23,10 @@ Reglas que se aplican al usar la plantilla:
   aplica a esos ficheros; si dos sitios dicen lo mismo, acaban diciendo cosas distintas.
 - **El comando de `verify-command` es el mismo que documenta `CLAUDE.md`** para "verificar
   antes de dar algo por bueno". Si hay dos comandos, uno se queda obsoleto.
+- **Los comandos de Python van con `uv run`** (`uv run pytest -q`, `uv run ruff check .`), tanto
+  en `settings.json` como en `verify-command` y en la skill `pr-gate`: es lo que garantiza que
+  corren en el `.venv` del repo, sincronizado con `uv.lock`. La regla completa está en la sección
+  "Entornos Python" del `CLAUDE.md` común.
 - Los hooks de proyecto (`hooks` en `.claude/settings.json`) se añaden solo cuando una regla
   tiene que cumplirse aunque nadie se acuerde y se puede comprobar con un comando. Los globales
   (`~/.claude/settings.json`) corren también en el repo.

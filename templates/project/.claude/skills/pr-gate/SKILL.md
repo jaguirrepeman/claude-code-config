@@ -43,7 +43,8 @@ comprobación con comando y resultado esperado, no una intención. Ejemplos: -->
 
 1. **Zonas calientes** (las de `.claude/rules/zonas-calientes.md`): si el diff toca alguna,
    tiene que haber un test nuevo o modificado que la cubra en el mismo PR, y tienes que
-   ejecutarlo y verlo pasar. Sin test, bloquea.
+   ejecutarlo y verlo pasar: `uv run pytest -q <fichero de test>` desde el directorio del
+   `pyproject.toml` (el CI ya ha hecho `uv sync --locked --dev` ahí). Sin test, bloquea.
 2. **La aplicación arranca**: `<comando de arranque>` en segundo plano y `curl -fsS
    <endpoint de salud>` devuelve 200 en menos de 30 s. Si no arranca, bloquea con la salida.
 3. **Contratos**: si cambia una firma pública, un esquema de API o un formato de fichero,
