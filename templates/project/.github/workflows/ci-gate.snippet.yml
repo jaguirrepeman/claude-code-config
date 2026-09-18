@@ -1,0 +1,103 @@
+# Trozo de .github/workflows/ci.yml: el gate de auto-merge completo. Se pega al final de `jobs:`
+# sustituyendo al job `auto-merge` anterior, y se adaptan los puntos marcados ADAPTAR (la lista
+# `needs` con los jobs de verificación del repo, en los dos jobs y en la condición, y los pasos
+# de setup del job `review`). El bloque `on:` debe incluir `ready_for_review`:
+#
+#   pull_request:
+#     branches: [main]
+#     types: [opened, synchronize, reopened, ready_for_review]
+#
+# Sin él, marcar un draft como listo no lanza nada y el PR se queda en verde sin fusionarse.
+# Es el mismo bloque que llevan finance, atril, idealista_bot, gymapp y koboannotations.
+
+  # ---------------------------------------------------------------------------
+  # Revisión propia del repo antes del merge. Sin el secreto CLAUDE_CODE_OAUTH_TOKEN el paso de
+  # Claude se salta y el job pasa: el gate se queda en los tests, como antes. Con el secreto, la
+  # skill `.claude/skills/pr-gate` revisa el PR (zonas calientes, arranque de la app, contratos)
+  # y un veredicto `block` hace fallar este job y para el merge. Los PR de dependabot no pasan
+  # por Claude (la action rechaza actores bot; para dependencias basta el CI).
+  review:
+    name: Revisión propia del repo (Claude)
+    needs: [tests]                       # ADAPTAR
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    env:
+      PR_BASE: ${{ github.base_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Comprobar si hay token de Claude
+        id: token
+        run: echo "present=${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+      # ADAPTAR: instalar aqui lo que la skill necesite para arrancar la app o correr un test
+      # concreto (mismos pasos que el job `tests`), todos con `if: steps.token.outputs.present == 'true'`.
+      - uses: anthropics/claude-code-action@v1
+        if: steps.token.outputs.present == 'true'
+        continue-on-error: true
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: "/pr-gate ${{ github.event.pull_request.number }}"
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "Bash,Read,Grep,Glob,Write"
+      - name: Veredicto
+        if: steps.token.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          f=/tmp/pr-gate-verdict.json
+          if [ ! -s "$f" ]; then
+            gh pr comment "$PR" --body "pr-gate: sin veredicto (la revisión no terminó); se fusiona con los tests como único gate."
+            exit 0
+          fi
+          python3 - "$f" "$PR" <<'PY'
+          import json, subprocess, sys
+          v = json.load(open(sys.argv[1], encoding="utf-8"))
+          verdict = v.get("verdict", "pass")
+          lines = [f"pr-gate: **{verdict}**. {v.get('summary', '')}"]
+          for x in v.get("findings", []):
+              lines.append(f"- `{x.get('file', '?')}` [{x.get('severity', 'note')}] {x.get('what', '')}")
+              if x.get("proof"):
+                  lines.append(f"  - prueba: `{x['proof'][:300]}`")
+          subprocess.run(["gh", "pr", "comment", sys.argv[2], "--body", "\n".join(lines)], check=False)
+          sys.exit(1 if verdict == "block" else 0)
+          PY
+
+  # ---------------------------------------------------------------------------
+  # Único camino automático a la rama principal: squash del PR si todo lo de `needs` pasa. Solo
+  # en PR no-draft (draft para retener). `always()` porque `review` se salta en dependabot y un
+  # job saltado en `needs` saltaría también este; por eso cada dependencia se comprueba una a
+  # una. IMPORTANTE: un job de verificación nuevo se añade a `needs` Y a la condición.
+  auto-merge:
+    name: Auto-merge on green
+    needs: [tests, review]               # ADAPTAR
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      needs.tests.result == 'success' &&
+      (needs.review.result == 'success' || needs.review.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Squash-merge the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh pr merge "${{ github.event.pull_request.number }}"
+          --repo "${{ github.repository }}"
+          --squash --delete-branch

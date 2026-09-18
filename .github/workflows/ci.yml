@@ -2,10 +2,13 @@ name: CI
 
 # Los hooks cambian el comportamiento de todas las sesiones en todas las máquinas, así que se
 # tratan como código: lint y tests en cada PR y en cada push a main. La suite es offline y crea
-# repos git temporales; no toca nada de la máquina.
+# repos git temporales; no toca nada de la máquina. El job `auto-merge` fusiona el PR por squash
+# solo si `hooks` pasa: mismo gate que en los repos de proyecto (repo privado en plan Free, sin
+# branch protection). Para retener un PR, draft.
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   workflow_dispatch:
@@ -27,3 +30,22 @@ jobs:
       - run: ruff check .
       - run: ruff format --check hooks
       - run: pytest -q hooks/tests
+
+  auto-merge:
+    name: Auto-merge on green
+    needs: [hooks]
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Squash-merge the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh pr merge "${{ github.event.pull_request.number }}"
+          --repo "${{ github.repository }}"
+          --squash --delete-branch

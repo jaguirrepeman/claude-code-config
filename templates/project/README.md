@@ -10,6 +10,8 @@ sustituye al `CLAUDE.md` del proyecto, lo complementa.
 | `.claude/rules/zonas-calientes.md` | Regla con `paths:`: solo entra en contexto cuando la sesión toca esos ficheros. Declara las zonas calientes del repo (donde un error cambia un número, no rompe el build) y qué implican | Sí: los globs y el porqué |
 | `.claude/verify-command` | El comando de verificación completa del repo, una línea. Lo lee `hooks/pre-push-verify.py` antes de cada `git push` | Sí |
 | `gitignore.snippet` | Lo que se añade al `.gitignore` del repo: lo personal de `.claude/` fuera de git, lo compartido dentro | No |
+| `.claude/skills/pr-gate/SKILL.md` | Revisión propia del repo antes del auto-merge. La ejecuta el job `review` del CI con la GitHub Action de Claude; su veredicto `block` para el merge | Sí: la sección "Qué comprobar en este repo", con comandos y resultado esperado |
+| `.github/workflows/ci-gate.snippet.yml` | Los jobs `review` y `auto-merge` del gate y el `ready_for_review` del disparador, para pegar en `ci.yml` | Sí: `needs` y los pasos de setup del job `review` |
 
 Reglas que se aplican al usar la plantilla:
 
