@@ -37,6 +37,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from _target_dir import target_dir
+
 TIMEOUT_GIT = 5
 DEFAULT_TIMEOUT = 540
 MAX_OUTPUT = 4000
@@ -108,7 +110,9 @@ def main() -> None:
     if not isinstance(command, str) or not GIT_PUSH.search(command):
         return
 
-    cwd = payload.get("cwd") or None
+    # El repo que importa es aquel en el que va a correr el comando, que puede no ser el de la
+    # sesión (`cd ../otro && git ...`, `git -C ../otro ...`).
+    cwd = target_dir(command, payload.get("cwd") or None)
     top = git("rev-parse", "--show-toplevel", cwd=cwd)
     if top is None:
         return
