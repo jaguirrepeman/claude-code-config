@@ -19,6 +19,7 @@ al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 | `skills/audit/` | `~/.claude/skills/audit/` | `/audit`: auditoría de un repo con tabla de criticidad, sin editar nada |
 | `skills/deploy-pi/` | `~/.claude/skills/deploy-pi/` | `/deploy-pi`: despliega a la Pi y exige verificación en vivo con evidencia real |
 | `skills/refute/` | `~/.claude/skills/refute/` | `/refute [criterio]`: segunda opinión en contexto limpio. Lanza al subagente `verifier` contra el diff actual y devuelve un veredicto con pruebas; no arregla nada |
+| `skills/humanizar/` | `~/.claude/skills/humanizar/` | `/humanizar [fichero]`: quita los tics de texto de IA en español o inglés sin cambiar lo que dice. Trae `tells.py`, un detector sin dependencias que cuenta los patrones y lista candidatos con fichero:línea, y cuatro pruebas para decidir cada contraste "no es X, es Y" |
 | `agents/repo-auditor.md` | `~/.claude/agents/repo-auditor.md` | Subagente de solo lectura para explorar y auditar repos sin gastar el contexto principal |
 | `agents/verifier.md` | `~/.claude/agents/verifier.md` | Subagente verificador: intenta refutar un cambio ya hecho, ejecuta la verificación del repo y recalcula por otro camino. Es el "revisor independiente" de `docs/ways-of-working.md`, sección 5.2 |
 | `hooks/lint-check.py` | `~/.claude/hooks/` | `PostToolUse`: lint del fichero recién editado (ruff o eslint del repo), informativo, sub-segundo |
@@ -111,6 +112,7 @@ antes de arreglo") es una línea en `CLAUDE.md`; una skill es un procedimiento c
 | `audit` | Auditoría de solo lectura con tabla de criticidad y plan priorizado, antes de tocar código | Se pedía en cada repo nuevo con pasos distintos cada vez |
 | `deploy-pi` | Deploy a la Pi con verificación en vivo obligatoria | El paso que se saltaba era la verificación con evidencia real |
 | `refute` | Segunda opinión en contexto limpio: un subagente que no escribió el cambio intenta refutarlo y devuelve pruebas | La revisión con contexto limpio se pedía con una frase distinta cada vez y sin criterio; la skill fija el procedimiento, el formato y que no arregle nada |
+| `humanizar` | Pasada final sobre un texto para quitar lo que suena a IA (contrastes "no es X, es Y", fragmentos cortos, rayas, léxico inflado), con detector y recuento antes y después | Se pedía con una frase distinta cada vez ("suena a IA", "déjalo más llano") y sin criterio para decidir qué tocar; medido en 38 documentos de un repo real, lo frecuente era forma (139 "X, no Y.", 52 "no es X, es Y", 72 fragmentos cortos) y el léxico de los catálogos casi no aparecía (5 aciertos), así que las listas de palabras no bastaban. Copia general de la `humanizar-es` de SKLUM, sin lo específico del proyecto |
 
 Candidatas descartadas: convenciones de commit y ramas (regla, no procedimiento), verificación
 con lint y tests (un comando, ya en `CLAUDE.md`), revisión de código (`/code-review` del harness
