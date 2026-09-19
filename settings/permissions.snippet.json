@@ -23,17 +23,18 @@
       "Bash(gh pr list:*)",
       "Bash(gh pr checks:*)",
       "Bash(gh run list:*)",
-      "Bash(gh run view:*)"
+      "Bash(gh run view:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr ready:*)"
     ],
     "ask": [
-      "Bash(git push:*)",
       "Bash(git merge:*)",
       "Bash(git rebase:*)",
       "Bash(git reset --hard:*)",
       "Bash(git branch -D:*)",
       "Bash(git worktree remove:*)",
-      "Bash(gh pr merge:*)",
-      "Bash(gh pr create:*)"
+      "Bash(gh pr merge:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",

@@ -118,7 +118,10 @@ juzga por peligro técnico, no por tus normas. Un commit, para él, es rutina. P
 `ask` y `deny` siguen importando: son donde se pone el límite propio. **Y el límite razonable no
 es el commit, es el push.** Un commit es local, no lo ve nadie y se deshace con un `git revert`,
 así que pararse en cada uno es fricción sin beneficio; lo que sale del repo local ya lo ve el
-otro y deshacerlo cuesta.
+otro y deshacerlo cuesta. Y en un repo personal con gate de CI, tampoco el push: la rama es
+propia, el hook de push verifica antes de que salga nada, y quien fusiona es el gate, solo en
+verde. Ahí el límite se mueve a lo que se salta el gate (fusionar a mano) o no se deshace
+(borrar ramas, `reset --hard`). Cada `machine.md` dice cuál de los dos casos aplica.
 
 **Cómo crece la lista.** Cuando aceptas un permiso en caliente con la opción de no volver a
 preguntar, esa decisión se escribe en un fichero y sigue viva mañana. Va al `settings.local.json`
