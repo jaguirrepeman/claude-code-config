@@ -89,9 +89,11 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
   push y `gh pr create` salían con confirmación hasta el 2026-09-19; desde entonces van en
   `allow` porque el gate del CI es quien fusiona, solo en verde, y el hook `pre-push-verify`
   ya para el push si la verificación falla. Lo que sigue pidiendo confirmación es lo que se
-  salta el gate o no se deshace: `gh pr merge` a mano, `merge`, `rebase`, `reset --hard`,
-  borrar ramas. En la máquina corporativa (repo de equipo, sin gate propio) se dejan `git push`
-  y `gh pr create` en `ask` al fusionar el snippet.
+  no se deshace: `merge`, `rebase`, `reset --hard`, borrar ramas. `gh pr merge` también va en
+  `allow` (decidido el 2026-09-19), para fusionar a mano un PR en verde que el gate no cogió;
+  `--auto` sigue denegado porque en un repo privado Free fusiona sin esperar al CI. En la
+  máquina corporativa (repo de equipo, sin gate propio) se dejan `git push`, `gh pr create` y
+  `gh pr merge` en `ask` al fusionar el snippet.
 - **La verificación se exige en el push, no en cada turno.** Un `Stop` hook que verifica en cada
   respuesta tarda segundos y se acaba apagando (probado). El push pasa pocas veces al día y es
   cuando el código llega al CI o a otra persona. Cada repo declara su comando en
