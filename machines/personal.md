@@ -40,7 +40,9 @@ Se instala como `~/.claude/machine.md`. Lo importa el `CLAUDE.md` común al fina
 - **`git push` y `gh pr create` no piden confirmación** (decidido el 2026-09-19): son repos
   personales de una sola persona, el hook `pre-push-verify` corre la verificación antes de que
   salga nada y el gate del CI es quien fusiona, solo en verde. Abrir un PR no-draft es dar la
-  orden de fusionar y desplegar; lo que no deba salir todavía se abre como draft.
+  orden de fusionar y desplegar; lo que no deba salir todavía se abre como draft. `gh pr merge`
+  tampoco pregunta: sirve para fusionar a mano un PR que el gate no cogió (por ejemplo, uno
+  anterior al gate), y solo se usa con el CI en verde.
 - **No ejecutar `gh pr merge --auto`** salvo que conste que el repo tiene branch protection o
   checks obligatorios de verdad. En un repo privado de plan Free no hay eso, así que `--auto`
   fusiona al instante sin esperar al CI. Si el repo tiene un job `auto-merge` que depende de los

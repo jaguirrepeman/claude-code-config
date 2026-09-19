@@ -26,15 +26,15 @@
       "Bash(gh run view:*)",
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
-      "Bash(gh pr ready:*)"
+      "Bash(gh pr ready:*)",
+      "Bash(gh pr merge:*)"
     ],
     "ask": [
       "Bash(git merge:*)",
       "Bash(git rebase:*)",
       "Bash(git reset --hard:*)",
       "Bash(git branch -D:*)",
-      "Bash(git worktree remove:*)",
-      "Bash(gh pr merge:*)"
+      "Bash(git worktree remove:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",
