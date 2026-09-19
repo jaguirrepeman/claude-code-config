@@ -25,6 +25,9 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
   una sesión o el entorno puede cortar la sesión a medias.
 - **Exploración amplia, a un subagente.** "Investiga esto" sin acotar se manda a un subagente de
   solo lectura que devuelve la conclusión, no al contexto principal.
+- **El mismo cambio en varios repos se delega, no se hace a mano uno a uno**: un subagente por
+  repo, cada uno en su worktree, o `claude -p` en bucle desde el terminal. Claude coordina y
+  revisa los PR resultantes; si se descubre haciéndolo a mano en el segundo repo, para y delega.
 
 ## Disciplina de alcance
 
@@ -32,6 +35,9 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
   entero. Nada de refactors oportunistas dentro de un arreglo.
 - Antes de refactors grandes o cambios multi-fichero, exponer plan y alcance, y esperar
   confirmación.
+- **Salida generada en serie (índices, fichas, layouts, tablas), primero una muestra.** Enseñar
+  la estructura con dos o tres elementos y esperar el visto bueno antes de generar el resto.
+  Por defecto, la salida más pequeña que sirva (un índice por capítulos, no por apartados).
 - A la segunda corrección fallida sobre lo mismo, parar: limpiar contexto y reescribir el encargo
   con lo aprendido, no seguir corrigiendo encima.
 
@@ -118,6 +124,9 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
 ## Contexto
 
 - Una tarea, una sesión. `/clear` antes de empezar algo no relacionado.
+- Ante "retoma aquello" o "busca ese hilo" sin más contexto: primero el estado del repo (rama,
+  commits recientes, PR abiertos), después como mucho dos intentos de búsqueda, y si no aparece,
+  preguntar. Nunca gastar la sesión buscando.
 - Al compactar, conservar siempre la lista completa de ficheros modificados y las decisiones
   tomadas.
 - Al cerrar una tarea, lo decidido va a un fichero versionado antes de cerrar. La memoria

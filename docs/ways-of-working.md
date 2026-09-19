@@ -636,6 +636,20 @@ a proponer lo descartado sin un motivo nuevo.
 Cualquier hook o skill que se adopte se versiona y, si el repo es compartido, se estrena
 avisando al otro, porque cambia también sus sesiones.
 
+**Pasada de `/insights` del 2026-09-19** (63 sesiones, del 4 al 19 de septiembre; casi toda la
+configuración actual entró los días 17 y 18, así que la fricción que cuenta es en gran parte
+anterior a ella). Aceptado: `/repo-hygiene`; tres reglas en `CLAUDE.md` (delegar el mismo
+cambio en varios repos, muestra antes de generar en serie, dos intentos y preguntar ante
+"retoma aquello"); en `machine.md`, nunca editar a mano en la Pi y cache bust del service
+worker antes de verificar en Kindle o Kobo; captura de navegador como evidencia en
+`/deploy-pi`. Descartado: `/ship` (el flujo rama, PR, gate, deploy ya está en reglas y en el
+gate; una skill sería un tercer sitio que dice lo mismo; se revisa si la próxima pasada
+muestra que se sigue reexplicando); el enjambre de seis subagentes con seis worktrees por
+auditoría (contradice "nunca más de uno o dos worktrees vivos" de 6.3; si se quiere, es una
+decisión sobre esa regla, no una skill); un hook que corra ruff sobre todo el repo tras cada
+edición (ya descartado en 8: lint del fichero tocado, sí). Pendiente sin decidir: un agente
+de mantenimiento que compare cada repo con `templates/project/` y abra un PR por el drift.
+
 ---
 
 ## 8. Descartado, y por qué

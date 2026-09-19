@@ -52,7 +52,10 @@ No digas "desplegado" ni "funciona" sin esto:
   negocio real (p. ej. una cifra de cartera, un rating, un anuncio concreto).
 - Si el cambio toca varios dispositivos/clientes (iPad, móvil, Kindle
   Scribe...), verifica que los otros no se rompieron, no solo el que motivó
-  el cambio.
+  el cambio. En Kindle y Kobo, cache bust del service worker antes de mirar.
+- Si el cambio es de interfaz, además del curl: abre la página en el
+  navegador integrado, captura de pantalla de la vista que cambió, y compara
+  lo que se ve con lo que el cambio prometía. La captura es la evidencia.
 - Si algo de esto no se puede verificar de verdad, dilo explícitamente
   ("sin verificar: ...") en vez de reportar éxito.
 
