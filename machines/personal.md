@@ -27,10 +27,16 @@ Se instala como `~/.claude/machine.md`. Lo importa el `CLAUDE.md` común al fina
 - **Ficheros systemd**: nunca escribir un unit file con `sudo tee` desde Windows; es propenso a
   fallos silenciosos (puede vaciar el fichero y dejar el servicio enmascarado). Escribir el
   fichero en local, copiarlo con `scp`, y en la Pi `sudo mv` más `sudo systemctl daemon-reload`.
+- **Nunca editar ficheros a mano en la Pi ni desplegar con pasos sueltos.** El camino es rama,
+  PR, gate en verde, script de deploy del repo, health check. Si el pipeline falla, se arregla
+  el pipeline (en su repo, con su PR), no se rodea con un `ssh` y un `nano`.
 - Tras cualquier deploy a la Pi, comprobar el endpoint o la página en vivo (curl o navegador) y
   pegar los valores reales observados antes de afirmar que funciona.
 - Si el cambio toca layout responsive o varios dispositivos (iPad, móvil, Kindle Scribe, Kobo),
   verificar que los demás siguen renderizando bien; no declarar éxito comprobando solo uno.
+- Kindle Scribe y Kobo cachean la app con service worker: antes de verificar en ellos, forzar
+  la recarga sin caché (o subir la versión del service worker) y comprobar que la versión que
+  se ve es la recién desplegada; si no, se está verificando la anterior.
 
 ## Git y GitHub
 
