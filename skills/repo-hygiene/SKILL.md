@@ -53,5 +53,13 @@ Después de la tabla, **para y pide confirmación una sola vez para toda la list
 confirma, ejecuta en ese orden (worktrees, ramas locales, ramas remotas) y pega la salida real
 de cada comando. Si algo falla, se para ahí y se enseña el error; no se sigue con el resto.
 
+Una excepción, vista en Windows el 2026-09-19: `git worktree remove` puede terminar con
+"Permission denied" o "Device or resource busy" porque otro proceso (un terminal de otra
+sesión, normalmente) tiene la carpeta como directorio actual. Git ya ha desregistrado el
+worktree (se comprueba con `git worktree list`: si no aparece, es este caso); solo queda la
+carpeta vacía. Entonces no se para: se sigue con las ramas y la carpeta se reporta al final
+como resto, con el aviso de que se borra al cerrar el proceso que la bloquea. Si el worktree
+sigue apareciendo en `git worktree list`, no es este caso y sí se para.
+
 Termina con el `git branch -vv` y el `git worktree list` de después, para que se vea lo que
 queda.
