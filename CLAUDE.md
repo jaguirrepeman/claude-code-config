@@ -57,8 +57,10 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
 
 ## Git
 
-- **Claude commitea cuando se le pide; no decide por su cuenta que algo merece commit.** `push`,
-  fusionar y borrar ramas nunca pasan sin confirmación explícita en cada ocasión.
+- **Claude commitea cuando se le pide; no decide por su cuenta que algo merece commit.** Si el
+  `push` y abrir el PR piden confirmación lo decide `machine.md`: donde el gate del CI fusiona
+  solo en verde, salen sin preguntar; donde no, se pregunta. Fusionar a mano (`gh pr merge`) y
+  borrar ramas piden confirmación siempre, en cada ocasión.
 - **Las ramas las abre Claude, no la persona**, antes de tocar el primer fichero. Una tarea, una
   rama corta, un worktree. Nunca mezclar temas en una rama. Rama corta son horas, no semanas: dos
   días es el límite; si se pasa, la tarea era demasiado grande y se parte.

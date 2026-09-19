@@ -85,8 +85,13 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
 - **En un repo que ya tiene sus propios hooks de proyecto** (`.claude/settings.json`), los
   globales corren también. Un aviso de estado repetido es inofensivo; si molesta, se quita el del
   proyecto o el global, no los dos.
-- **El commit no está en `ask`, a propósito.** Es local y se deshace. Lo que para de verdad es
-  que nada salga de la máquina sin que lo veas: `push`, `merge`, `pr create`.
+- **Ni el commit ni el push están en `ask`, a propósito.** El commit es local y se deshace. El
+  push y `gh pr create` salían con confirmación hasta el 2026-09-19; desde entonces van en
+  `allow` porque el gate del CI es quien fusiona, solo en verde, y el hook `pre-push-verify`
+  ya para el push si la verificación falla. Lo que sigue pidiendo confirmación es lo que se
+  salta el gate o no se deshace: `gh pr merge` a mano, `merge`, `rebase`, `reset --hard`,
+  borrar ramas. En la máquina corporativa (repo de equipo, sin gate propio) se dejan `git push`
+  y `gh pr create` en `ask` al fusionar el snippet.
 - **La verificación se exige en el push, no en cada turno.** Un `Stop` hook que verifica en cada
   respuesta tarda segundos y se acaba apagando (probado). El push pasa pocas veces al día y es
   cuando el código llega al CI o a otra persona. Cada repo declara su comando en
