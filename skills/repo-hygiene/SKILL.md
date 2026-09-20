@@ -4,6 +4,7 @@ description: Higiene del repo actual. Lista ramas locales y remotas ya fusionada
 user-invocable: true
 disable-model-invocation: true
 argument-hint: [--dry-run]
+allowed-tools: Bash(git fetch *), Bash(git symbolic-ref *), Bash(git branch *), Bash(git worktree list *), Bash(git merge-base *), Bash(git status *), Bash(gh pr list *)
 ---
 
 # /repo-hygiene: podar lo que ya está fusionado
@@ -13,12 +14,15 @@ demuestra y después pregunta. Con `--dry-run` en `$ARGUMENTS`, solo la tabla; n
 
 ## Estado actual (automático)
 
+Cada comando lleva `|| true`: un comando `!` que falla aborta la skill entera, y aquí un `gh`
+sin red o un repo sin remoto no deben impedir ver el resto.
+
 ```!
-git fetch --prune --quiet 2>/dev/null
+git fetch --prune --quiet 2>/dev/null || true
 echo "rama protegida: $(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#origin/##' || echo main)"
-echo "--- ramas locales (vv)"; git branch -vv 2>/dev/null
-echo "--- ramas remotas"; git branch -r 2>/dev/null | grep -v HEAD
-echo "--- worktrees"; git worktree list 2>/dev/null
+echo "--- ramas locales (vv)"; git branch -vv 2>/dev/null || true
+echo "--- ramas remotas"; git branch -r 2>/dev/null | grep -v HEAD || true
+echo "--- worktrees"; git worktree list 2>/dev/null || true
 echo "--- PR fusionados (rama de origen -> número)"
 gh pr list --state merged --limit 40 --json number,headRefName --jq '.[] | "\(.headRefName) -> #\(.number)"' 2>/dev/null || echo "(gh no disponible)"
 ```
