@@ -131,6 +131,9 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
   tomadas.
 - Al cerrar una tarea, lo decidido va a un fichero versionado antes de cerrar. La memoria
   automática es índice con punteros al repo, nunca el original.
+- **Un hilo se cierra con `/cierre`**, cuando la persona dice "hemos terminado" o pregunta si
+  puede archivar: los pendientes pasan a issues del repo antes de mirar git, y el mensaje final
+  es el veredicto ARCHIVABLE o NO ARCHIVABLE. "Quedan X e Y" en un mensaje no es guardar nada.
 
 ## Texto
 
