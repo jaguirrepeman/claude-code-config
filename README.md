@@ -18,6 +18,8 @@ al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 | `docs/ways-of-working.md` | (solo lectura) | El porqué de cada regla: principios, piezas, sesión, flujo, verificación, git con agentes, hooks, y qué se descarta |
 | `skills/audit/` | `~/.claude/skills/audit/` | `/audit`: auditoría de un repo con tabla de criticidad, sin editar nada |
 | `skills/deploy-pi/` | `~/.claude/skills/deploy-pi/` | `/deploy-pi`: despliega a la Pi y exige verificación en vivo con evidencia real |
+| `skills/repos/` | `~/.claude/skills/repos/` | `/repos [--days N]`: estado de todos los repos de la carpeta de proyectos de una vez, con `scripts/status.py` (determinista, solo lectura, unos 30 s): rama, sin commitear, sin push, worktrees, ramas fusionadas sin borrar, PR abiertos con checks y edad, issues abiertos, CI de main, y las líneas de pendientes del último mensaje de cada sesión reciente |
+| `skills/cierre/` | `~/.claude/skills/cierre/` | `/cierre`: check de fin de hilo. Primero los pendientes de la conversación pasan a issues del repo (enseña la lista, espera el OK, `gh issue create`); después git: nada sin commitear, sin push ni sin fusionar, worktree borrable. Termina con `VEREDICTO: ARCHIVABLE` o `NO ARCHIVABLE` con pruebas. Lo lanza el usuario o Claude cuando le dicen "hemos terminado" |
 | `skills/repo-hygiene/` | `~/.claude/skills/repo-hygiene/` | `/repo-hygiene [--dry-run]`: ramas locales y remotas ya fusionadas (probado con `merge-base` o con el PR fusionado, no con el `[gone]`) y worktrees huérfanos; tabla con la prueba, y borra solo tras confirmación |
 | `skills/refute/` | `~/.claude/skills/refute/` | `/refute [criterio]`: segunda opinión en contexto limpio. Lanza al subagente `verifier` contra el diff actual y devuelve un veredicto con pruebas; no arregla nada |
 | `skills/humanizar/` | `~/.claude/skills/humanizar/` | `/humanizar [fichero]`: quita los tics de texto de IA en español o inglés sin cambiar lo que dice. Trae `tells.py`, un detector sin dependencias que cuenta los patrones y lista candidatos con fichero:línea, y cuatro pruebas para decidir cada contraste "no es X, es Y" |
@@ -28,8 +30,9 @@ al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 | `hooks/block-commit-on-protected.py` | `~/.claude/hooks/` | `PreToolUse`: deniega `git commit` en la rama protegida (`origin/HEAD`, o `main`/`master`) |
 | `hooks/_target_dir.py` | `~/.claude/hooks/` | Ayuda de los dos hooks anteriores: el repo que se mira es aquel al que va el comando (`cd ../otro && git ...`, `git -C ../otro ...`), no el `cwd` de la sesión |
 | `hooks/pre-push-verify.py` | `~/.claude/hooks/` | `PreToolUse`: antes de un `git push` ejecuta el comando de `.claude/verify-command` del repo y deniega el push si falla. Sin ese fichero no hace nada |
-| `hooks/tests/` | (solo este repo) | Tests de los cuatro hooks: `pytest -q hooks/tests`. Cada hook se ejecuta como proceso aparte con JSON por stdin, igual que lo lanza Claude Code |
-| `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los cuatro scripts |
+| `hooks/pending-guard.py` | `~/.claude/hooks/` | `Stop`: si el último mensaje parece un cierre ("Hecho", "fusionado por el gate", "en producción") y deja pendientes sin enlace a un issue, no deja terminar el turno hasta convertirlos en issues (o decir "sin pendientes que guardar"). Solo texto, sin git, milisegundos; bloquea una vez por turno |
+| `hooks/tests/` | (solo este repo) | Tests de los cinco hooks: `pytest -q hooks/tests`. Cada hook se ejecuta como proceso aparte con JSON por stdin, igual que lo lanza Claude Code |
+| `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los cinco scripts |
 | `settings/permissions.snippet.json` | fusionar en `~/.claude/settings.json` | Lista curada de permisos: `allow` para lo de solo lectura, `ask` para lo que sale de la máquina, `deny` para lo irreversible y los secretos |
 | `templates/project/` | copiar a la raíz de cada repo | Plantilla de `.claude/` para un repo: `settings.json`, regla por ruta de zonas calientes, `verify-command` y el trozo de `.gitignore`. Ver su README |
 | `templates/project/.claude/skills/pr-gate/` | `.claude/skills/pr-gate/` del repo | Skill que revisa cada PR antes del auto-merge con lo que un test genérico no ve en ese repo (zona caliente con su test, la app arranca, contratos). La ejecuta el job `review` del CI y su veredicto `block` para el merge. Se adapta la sección "Qué comprobar" |
@@ -77,7 +80,7 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
   `additionalContext`, que es lo que hace que Claude lo vea y lo arregle.
 - **Lint del fichero, no del repo.** `ruff check .` sobre un repo grande tarda segundos y un hook
   que tarda se acaba apagando. Sobre un fichero es sub-segundo.
-- **Los tres hooks fallan abiertos, devuelven la salida del fallo y nunca salen con error.** Son
+- **Los hooks fallan abiertos, devuelven la salida del fallo y nunca salen con error.** Son
   las tres reglas de diseño de `docs/ways-of-working.md`, sección 7. Cualquier hook nuevo las
   sigue.
 - **El bloqueo de commit es de sesión, no de servidor.** Impide que una sesión de Claude Code
@@ -100,6 +103,11 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
   cuando el código llega al CI o a otra persona. Cada repo declara su comando en
   `.claude/verify-command`; sin él, el hook calla. `CLAUDE_SKIP_VERIFY=1` lo apaga para una
   sesión, para un push consciente de emergencia.
+- **El único hook de `Stop` es `pending-guard`, y no ejecuta nada.** Mira el texto del último
+  mensaje (la documentación lo entrega en `last_assistant_message`) y solo interviene cuando un
+  mensaje de cierre deja pendientes sin issue: el fallo real era archivar el hilo con "quedan X e
+  Y" y perderlos. Bloquea una vez (`stop_hook_active`) y falla abierto. `CLAUDE_SKIP_PENDING_GUARD=1`
+  lo apaga para una sesión.
 - **`/deploy-pi` lleva `disable-model-invocation: true`.** Desplegar tiene efectos fuera de la
   máquina; lo lanza la persona con `/deploy-pi`, nunca el modelo por su cuenta. Es lo que la
   documentación recomienda para skills con efectos secundarios.

@@ -46,6 +46,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$HOME/.claude/hooks/pending-guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
