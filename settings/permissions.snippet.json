@@ -27,7 +27,10 @@
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
       "Bash(gh pr ready:*)",
-      "Bash(gh pr merge:*)"
+      "Bash(gh pr merge:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue create:*)"
     ],
     "ask": [
       "Bash(git merge:*)",
