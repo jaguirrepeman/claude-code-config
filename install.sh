@@ -30,9 +30,9 @@ pairs() {
   echo "machines/$MACHINE.md:machine.md"
   for f in "$HERE"/agents/*.md; do echo "agents/$(basename "$f"):agents/$(basename "$f")"; done
   for f in "$HERE"/hooks/*.py; do echo "hooks/$(basename "$f"):hooks/$(basename "$f")"; done
-  for d in "$HERE"/skills/*/; do
-    n=$(basename "$d")
-    for f in "$d"*; do echo "skills/$n/$(basename "$f"):skills/$n/$(basename "$f")"; done
+  # Una skill puede traer subcarpetas (scripts/), así que se recorre entera.
+  (cd "$HERE" && find skills -type f -not -path '*/__pycache__/*' | sed 's#\\#/#g') | while read -r f; do
+    echo "$f:$f"
   done
 }
 
