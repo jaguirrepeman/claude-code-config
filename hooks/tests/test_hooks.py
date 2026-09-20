@@ -286,3 +286,71 @@ def test_env_command_overrides_file(repo: Path) -> None:
     _, out = run_hook("pre-push-verify.py", bash("git push", repo), repo, env)
     assert decision(out) == "deny"
     assert "exit 3" in json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+# --- pending-guard ---------------------------------------------------------------------------
+
+
+def stop(message: str, active: bool = False) -> dict:
+    return {"hook_event_name": "Stop", "last_assistant_message": message, "stop_hook_active": active}
+
+
+CLOSING_WITH_PENDING = (
+    "Hecho y en producción. PR #31 fusionado por el gate y desplegado.\n\n"
+    "Pendiente: la limpieza del cache del sitemap y el rating que sigue sin verificar."
+)
+
+
+def test_pending_guard_blocks_closing_message_with_pending_items(tmp_path: Path) -> None:
+    code, out = run_hook("pending-guard.py", stop(CLOSING_WITH_PENDING), tmp_path)
+    assert code == 0
+    payload = json.loads(out)
+    assert payload["decision"] == "block"
+    assert "gh issue create" in payload["reason"]
+
+
+def test_pending_guard_blocks_only_once_per_turn(tmp_path: Path) -> None:
+    code, out = run_hook("pending-guard.py", stop(CLOSING_WITH_PENDING, active=True), tmp_path)
+    assert (code, out) == (0, "")
+
+
+def test_pending_guard_passes_when_pending_items_are_issues(tmp_path: Path) -> None:
+    msg = CLOSING_WITH_PENDING + "\n\nIssues creados: https://github.com/u/r/issues/12"
+    code, out = run_hook("pending-guard.py", stop(msg), tmp_path)
+    assert (code, out) == (0, "")
+
+
+def test_pending_guard_passes_when_nothing_pending(tmp_path: Path) -> None:
+    msg = "Hecho y en producción. PR #31 fusionado por el gate. Sin pendientes que guardar."
+    code, out = run_hook("pending-guard.py", stop(msg), tmp_path)
+    assert (code, out) == (0, "")
+
+
+def test_pending_guard_ignores_mid_task_messages(tmp_path: Path) -> None:
+    msg = "Queda por revisar el parser; sigo con el siguiente fichero, pendiente el test."
+    code, out = run_hook("pending-guard.py", stop(msg), tmp_path)
+    assert (code, out) == (0, "")
+
+
+def test_pending_guard_ignores_cierre_not_archivable_verdict(tmp_path: Path) -> None:
+    msg = "NO ARCHIVABLE: hay 2 commits sin push y un pendiente sin issue. PR fusionado por el gate."
+    code, out = run_hook("pending-guard.py", stop(msg), tmp_path)
+    assert (code, out) == (0, "")
+
+
+def test_pending_guard_can_be_skipped_for_a_session(tmp_path: Path) -> None:
+    env = {"CLAUDE_SKIP_PENDING_GUARD": "1"}
+    code, out = run_hook("pending-guard.py", stop(CLOSING_WITH_PENDING), tmp_path, env)
+    assert (code, out) == (0, "")
+
+
+def test_pending_guard_never_fails_on_bad_input(tmp_path: Path) -> None:
+    r = subprocess.run(
+        [PYTHON, str(HOOKS / "pending-guard.py")],
+        input="esto no es json",
+        capture_output=True,
+        text=True,
+        cwd=str(tmp_path),
+        timeout=30,
+    )
+    assert (r.returncode, r.stdout.strip()) == (0, "")

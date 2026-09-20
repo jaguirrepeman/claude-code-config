@@ -28,8 +28,9 @@ al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 | `hooks/block-commit-on-protected.py` | `~/.claude/hooks/` | `PreToolUse`: deniega `git commit` en la rama protegida (`origin/HEAD`, o `main`/`master`) |
 | `hooks/_target_dir.py` | `~/.claude/hooks/` | Ayuda de los dos hooks anteriores: el repo que se mira es aquel al que va el comando (`cd ../otro && git ...`, `git -C ../otro ...`), no el `cwd` de la sesión |
 | `hooks/pre-push-verify.py` | `~/.claude/hooks/` | `PreToolUse`: antes de un `git push` ejecuta el comando de `.claude/verify-command` del repo y deniega el push si falla. Sin ese fichero no hace nada |
-| `hooks/tests/` | (solo este repo) | Tests de los cuatro hooks: `pytest -q hooks/tests`. Cada hook se ejecuta como proceso aparte con JSON por stdin, igual que lo lanza Claude Code |
-| `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los cuatro scripts |
+| `hooks/pending-guard.py` | `~/.claude/hooks/` | `Stop`: si el último mensaje parece un cierre ("Hecho", "fusionado por el gate", "en producción") y deja pendientes sin enlace a un issue, no deja terminar el turno hasta convertirlos en issues (o decir "sin pendientes que guardar"). Solo texto, sin git, milisegundos; bloquea una vez por turno |
+| `hooks/tests/` | (solo este repo) | Tests de los cinco hooks: `pytest -q hooks/tests`. Cada hook se ejecuta como proceso aparte con JSON por stdin, igual que lo lanza Claude Code |
+| `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los cinco scripts |
 | `settings/permissions.snippet.json` | fusionar en `~/.claude/settings.json` | Lista curada de permisos: `allow` para lo de solo lectura, `ask` para lo que sale de la máquina, `deny` para lo irreversible y los secretos |
 | `templates/project/` | copiar a la raíz de cada repo | Plantilla de `.claude/` para un repo: `settings.json`, regla por ruta de zonas calientes, `verify-command` y el trozo de `.gitignore`. Ver su README |
 | `templates/project/.claude/skills/pr-gate/` | `.claude/skills/pr-gate/` del repo | Skill que revisa cada PR antes del auto-merge con lo que un test genérico no ve en ese repo (zona caliente con su test, la app arranca, contratos). La ejecuta el job `review` del CI y su veredicto `block` para el merge. Se adapta la sección "Qué comprobar" |
@@ -77,7 +78,7 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
   `additionalContext`, que es lo que hace que Claude lo vea y lo arregle.
 - **Lint del fichero, no del repo.** `ruff check .` sobre un repo grande tarda segundos y un hook
   que tarda se acaba apagando. Sobre un fichero es sub-segundo.
-- **Los tres hooks fallan abiertos, devuelven la salida del fallo y nunca salen con error.** Son
+- **Los hooks fallan abiertos, devuelven la salida del fallo y nunca salen con error.** Son
   las tres reglas de diseño de `docs/ways-of-working.md`, sección 7. Cualquier hook nuevo las
   sigue.
 - **El bloqueo de commit es de sesión, no de servidor.** Impide que una sesión de Claude Code
@@ -100,6 +101,11 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
   cuando el código llega al CI o a otra persona. Cada repo declara su comando en
   `.claude/verify-command`; sin él, el hook calla. `CLAUDE_SKIP_VERIFY=1` lo apaga para una
   sesión, para un push consciente de emergencia.
+- **El único hook de `Stop` es `pending-guard`, y no ejecuta nada.** Mira el texto del último
+  mensaje (la documentación lo entrega en `last_assistant_message`) y solo interviene cuando un
+  mensaje de cierre deja pendientes sin issue: el fallo real era archivar el hilo con "quedan X e
+  Y" y perderlos. Bloquea una vez (`stop_hook_active`) y falla abierto. `CLAUDE_SKIP_PENDING_GUARD=1`
+  lo apaga para una sesión.
 - **`/deploy-pi` lleva `disable-model-invocation: true`.** Desplegar tiene efectos fuera de la
   máquina; lo lanza la persona con `/deploy-pi`, nunca el modelo por su cuenta. Es lo que la
   documentación recomienda para skills con efectos secundarios.
