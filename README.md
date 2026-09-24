@@ -140,6 +140,29 @@ fixture y la cuenta única de Spotify; en idealista_bot, extractor y valoración
 concreto y que la API arranque; en koboannotations, que nada se borre en el almacén ni en
 Notion; en gymapp, sin tests, datos del usuario y RLS en Supabase.
 
+### El secreto `CLAUDE_CODE_OAUTH_TOKEN` no se activa
+
+Decisión de 2026-09-24: el job `review` se queda en los cinco repos, pero sin el secreto, así
+que se salta y el gate son los tests. No se da de alta en ninguno. Por qué:
+
+- **Revisaría el mismo que escribe.** Todo lo que llega a un PR lo ha escrito Claude, y la
+  mirada en contexto limpio ya existe antes del push: `/refute` en zona caliente o en un diff
+  grande, `pre-push-verify` con la verificación del repo y el CI en verde. Otra pasada del mismo
+  modelo en el CI añade poco sobre eso.
+- **No cubre lo único que no escribe Claude.** La action rechaza actores bot: los PR de
+  dependabot, los únicos que nadie ha leído, no pasan por la revisión. Para ellos el control
+  útil es el CI y el `ignore` de versiones mayores en `dependabot.yml`.
+- **Cuesta cuota y tiempo en cada PR.** Gasta de la suscripción por PR no-draft (hasta 40
+  turnos) y alarga el CI, para repos personales de una sola persona.
+- **Lo que protege de verdad son los tests.** En la zona caliente (finance: cifras de dinero)
+  un test con cifra de referencia falla siempre; una revisión puede pasarlo por alto.
+
+No es un riesgo tenerlo ni quitarlo: el paso de Claude lleva `continue-on-error` y sin
+veredicto el job pasa, así que un token caducado o una suscripción cancelada no atascarían los
+PR. Si algún día se quiere, basta con dar de alta el secreto en el repo; no hay que tocar el
+`ci.yml`. Para retomarlo tendría que cambiar alguna de las razones de arriba (por ejemplo, que
+otra persona abra PR en estos repos).
+
 ## Skills: criterio de admisión
 
 Una skill se justifica solo si se cumplen las tres:

@@ -673,3 +673,7 @@ de mantenimiento que compare cada repo con `templates/project/` y abra un PR por
   `CLAUDE.md` no (2.1).
 - **Un hook `PostToolUse` que corra los tests tras cada edición.** Los tests tardan; el hook se
   apaga en una semana. Lint del fichero tocado sí (sub-segundo); tests, en el push.
+- **La revisión de PR con Claude en el CI (secreto `CLAUDE_CODE_OAUTH_TOKEN`).** Revisaría el
+  mismo modelo que escribió el cambio, no cubre los PR de dependabot y gasta cuota en cada PR;
+  la mirada limpia ya está en `/refute` antes del push. El job `review` se queda, pero sin el
+  secreto. Razones completas en el README, "Gate de auto-merge".
