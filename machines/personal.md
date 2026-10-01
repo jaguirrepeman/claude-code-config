@@ -58,3 +58,10 @@ Se instala como `~/.claude/machine.md`. Lo importa el `CLAUDE.md` común al fina
   acción con efecto en producción, no un paso inerte.
 - Para retener un PR sin que se fusione solo: abrirlo como *draft*; los jobs de auto-merge no
   corren en draft.
+- **Las ramas fusionadas se borran sin preguntar** (decidido el 2026-10-01). En GitHub lo hace
+  el propio repo: `delete_branch_on_merge` está activado en todos los repos de la cuenta, así
+  que la rama remota desaparece al fusionar el PR; en un repo nuevo, activarlo al crearlo
+  (`gh api -X PATCH repos/<owner>/<repo> -F delete_branch_on_merge=true`). En local, tras
+  `git fetch --prune`, Claude borra la rama y su worktree en cuanto comprueba que está
+  fusionada (PR en `MERGED` con la misma cabeza, o contenido ya en `main`), sin pedir
+  confirmación. Una rama sin fusionar sigue pidiendo confirmación.
