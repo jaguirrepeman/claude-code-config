@@ -66,7 +66,8 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
 - **Claude commitea cuando se le pide; no decide por su cuenta que algo merece commit.** Si el
   `push` y abrir el PR piden confirmación lo decide `machine.md`: donde el gate del CI fusiona
   solo en verde, salen sin preguntar; donde no, se pregunta. Lo mismo para fusionar a mano
-  (`gh pr merge`). Borrar ramas pide confirmación siempre, en cada ocasión.
+  (`gh pr merge`). Borrar una rama ya fusionada también lo decide `machine.md`; borrar una rama
+  sin fusionar pide confirmación siempre, en cada ocasión.
 - **Las ramas las abre Claude, no la persona**, antes de tocar el primer fichero. Una tarea, una
   rama corta, un worktree. Nunca mezclar temas en una rama. Rama corta son horas, no semanas: dos
   días es el límite; si se pasa, la tarea era demasiado grande y se parte.

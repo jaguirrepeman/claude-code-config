@@ -1,6 +1,6 @@
 ---
 name: repo-hygiene
-description: Higiene del repo actual. Lista ramas locales y remotas ya fusionadas y worktrees huérfanos, con la prueba de que están fusionados, y los borra solo tras confirmación. Úsalo cuando el usuario pida "limpia ramas", "quita los worktrees viejos", "higiene del repo" o al cerrar una tanda de PR.
+description: Higiene del repo actual. Lista ramas locales y remotas ya fusionadas y worktrees huérfanos, con la prueba de que están fusionados, y los borra (sin preguntar o tras confirmación, según `machine.md`). Úsalo cuando el usuario pida "limpia ramas", "quita los worktrees viejos", "higiene del repo" o al cerrar una tanda de PR.
 user-invocable: true
 disable-model-invocation: true
 argument-hint: [--dry-run]
@@ -53,8 +53,9 @@ Tabla en español, una fila por candidato:
 Acciones posibles: `git worktree remove <ruta>` (antes que la rama que lo ocupa),
 `git branch -D <rama>` (`-D` porque tras un squash `-d` se niega), `git push origin --delete <rama>`.
 
-Después de la tabla, **para y pide confirmación una sola vez para toda la lista**. Si se
-confirma, ejecuta en ese orden (worktrees, ramas locales, ramas remotas) y pega la salida real
+Después de la tabla, si `machine.md` dice que las ramas fusionadas se borran sin preguntar,
+borra las que tienen prueba de fusión y pide confirmación solo para el resto. Si no lo dice,
+**para y pide confirmación una sola vez para toda la lista**. Al borrar, ejecuta en ese orden (worktrees, ramas locales, ramas remotas) y pega la salida real
 de cada comando. Si algo falla, se para ahí y se enseña el error; no se sigue con el resto.
 
 Una excepción, vista en Windows el 2026-09-19: `git worktree remove` puede terminar con
