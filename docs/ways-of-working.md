@@ -246,8 +246,8 @@ La herramienta guarda una copia de los ficheros antes de cada cambio, así que *
 
 Con una limitación que hay que tener muy presente: **los checkpoints no cubren lo que hizo un
 comando de shell.** Si se ejecutó un `rm`, un `git reset` o un build que sobreescribió algo, eso
-no vuelve con rewind. Para eso está git, y por eso las acciones que salen del repo local viven
-en la lista `ask` (2.3).
+no vuelve con rewind. Para eso está git, y por eso lo que tira trabajo no guardado
+(`reset --hard`, `checkout -- <ruta>`, borrar una rama) vive en la lista `ask` (2.3).
 
 ---
 
@@ -429,8 +429,8 @@ eso el cuerpo lleva dentro cómo se levanta la app y qué se mira; y **no arregl
 afirmaciones con su prueba, marca como no verificado lo que no pudo comprobar y para. Lo que
 falle vuelve a la sesión de trabajo como un cambio nuevo con su diff.
 
-**Límite de lo que se le da.** Levantar servidores locales y navegar, sí. Builds, push y
-fusiones siguen en la lista `ask`: verificar no es entregar.
+**Límite de lo que se le da.** Levantar servidores locales y navegar, sí. Push y fusiones no
+son cosa suya: verificar no es entregar.
 
 ---
 
