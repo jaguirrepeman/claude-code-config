@@ -444,3 +444,51 @@ def test_branch_delete_asks_when_base_is_unknown(tmp_path: Path) -> None:
     git("branch", "claude/x", cwd=tmp_path)
     _, out = run_hook("guard-branch-delete.py", bash("git branch -D claude/x", tmp_path), tmp_path)
     assert decision(out) == "ask"
+
+
+# --- texto que menciona git sin ejecutarlo (issue #19) --------------------------------------
+
+
+def test_commit_text_inside_quotes_is_not_a_commit(repo: Path) -> None:
+    cmd = 'gh issue create --title t --body "falta probar git add, git commit y git push"'
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_commit_text_inside_heredoc_is_not_a_commit(repo: Path) -> None:
+    cmd = "cat > notas.md <<'EOF'\nPara guardar: git commit -m x\nEOF\ncat notas.md"
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_real_commits_are_still_detected(repo: Path) -> None:
+    for cmd in (
+        'git commit -m "texto; con punto y coma"',
+        "git -c user.name=X commit -m x",
+        "echo hola && git commit -m x",
+        "git add a.txt\ngit commit -m x",
+        "cat > f <<'EOF'\nhola\nEOF\ngit commit -m x",
+        "GIT_AUTHOR_NAME=X git commit -m x",
+    ):
+        _, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+        assert decision(out) == "deny", cmd
+
+
+def test_push_text_inside_quotes_is_not_a_push(repo: Path) -> None:
+    write_verify(repo, f'"{PYTHON}" -c "import sys; sys.exit(1)"')
+    for cmd in ('echo "luego git push"', "ssh pi@raspberry 'bash -lc \"cd app && git push\"'"):
+        code, out = run_hook("pre-push-verify.py", bash(cmd, repo), repo)
+        assert (code, out) == (0, ""), cmd
+
+
+def test_branch_delete_text_inside_quotes_is_not_a_delete(repo: Path) -> None:
+    work_branch(repo, "claude/x", "x.txt")
+    code, out = run_hook("guard-branch-delete.py", bash('echo "git branch -D claude/x"', repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_branch_delete_with_quoted_name_or_redirect_still_asks(repo: Path) -> None:
+    work_branch(repo, "claude/x", "x.txt")
+    for cmd in ('git branch -D "claude/x"', "git branch -D claude/x 2>/dev/null"):
+        _, out = run_hook("guard-branch-delete.py", bash(cmd, repo), repo)
+        assert decision(out) == "ask", cmd

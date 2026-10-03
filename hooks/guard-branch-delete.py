@@ -30,21 +30,17 @@ from __future__ import annotations
 
 import contextlib
 import json
-import re
-import shlex
 import shutil
 import subprocess
 import sys
 from typing import Any
 
+from _git_calls import git_calls
 from _target_dir import target_dir
 
 TIMEOUT_GIT = 5
 TIMEOUT_GH = 10
 
-SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|\n]")
-# Mismas opciones globales admitidas que en block-commit-on-protected (`git -C ruta branch`).
-GIT_BRANCH = re.compile(r"\bgit\b(?:\s+-[cC]\s*\S+|\s+--\S+)*\s+branch\b(.*)")
 BASE_CANDIDATES = ("origin/main", "origin/master", "main", "master")
 
 
@@ -64,14 +60,9 @@ def git(*args: str, cwd: str | None) -> str | None:
 def force_deleted_branches(command: str) -> list[str]:
     """Ramas locales que el comando borra a la fuerza, en todos sus subcomandos."""
     names: list[str] = []
-    for segment in SEGMENT_SPLIT.split(command):
-        m = GIT_BRANCH.search(segment)
-        if not m:
+    for sub, tokens in git_calls(command):
+        if sub != "branch":
             continue
-        try:
-            tokens = shlex.split(m.group(1))
-        except ValueError:
-            tokens = m.group(1).split()
         long_flags = {t for t in tokens if t.startswith("--")}
         short = "".join(t[1:] for t in tokens if t.startswith("-") and not t.startswith("--"))
         if "r" in short or "--remotes" in long_flags:
