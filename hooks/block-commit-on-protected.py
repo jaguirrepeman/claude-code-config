@@ -31,19 +31,14 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import re
 import subprocess
 import sys
 from typing import Any
 
+from _git_calls import git_calls
 from _target_dir import target_dir
 
 TIMEOUT_GIT = 5
-
-# `git commit` con cualquier flag, y también dentro de un comando compuesto
-# (`git add x && git commit -m ...`). Se admiten las opciones globales que van antes del
-# subcomando, del estilo `git -c user.name=X commit` o `git -C ruta commit`.
-GIT_COMMIT = re.compile(r"\bgit\b(?:\s+-[cC]\s*\S+|\s+--\S+)*\s+commit\b")
 
 
 def git(*args: str, cwd: str | None) -> str | None:
@@ -91,7 +86,8 @@ def main() -> None:
         return
 
     command = payload.get("tool_input", {}).get("command", "")
-    if not isinstance(command, str) or not GIT_COMMIT.search(command):
+    # Un `git commit` que se ejecuta, no uno que aparece dentro de un texto (issue #19).
+    if not isinstance(command, str) or not any(sub == "commit" for sub, _ in git_calls(command)):
         return
 
     # El repo que importa es aquel en el que va a correr el comando, que puede no ser el de la

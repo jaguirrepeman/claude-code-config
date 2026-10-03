@@ -31,22 +31,18 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+from _git_calls import git_calls
 from _target_dir import target_dir
 
 TIMEOUT_GIT = 5
 DEFAULT_TIMEOUT = 540
 MAX_OUTPUT = 4000
 VERIFY_FILE = Path(".claude") / "verify-command"
-
-# `git push` con cualquier flag, también dentro de un comando compuesto y con opciones globales
-# antes del subcomando (`git -C ruta push`).
-GIT_PUSH = re.compile(r"\bgit\b(?:\s+-[cC]\s*\S+|\s+--\S+)*\s+push\b")
 
 
 def git(*args: str, cwd: str | None) -> str | None:
@@ -107,7 +103,8 @@ def main() -> None:
     if payload.get("tool_name") != "Bash":
         return
     command = payload.get("tool_input", {}).get("command", "")
-    if not isinstance(command, str) or not GIT_PUSH.search(command):
+    # Un `git push` que se ejecuta aquí: no uno dentro de un texto ni de un `ssh` (issue #19).
+    if not isinstance(command, str) or not any(sub == "push" for sub, _ in git_calls(command)):
         return
 
     # El repo que importa es aquel en el que va a correr el comando, que puede no ser el de la
