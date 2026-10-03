@@ -32,6 +32,16 @@
             "statusMessage": "Verificación del repo antes del push..."
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$HOME/.claude/hooks/guard-branch-delete.py\"",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "PostToolUse": [

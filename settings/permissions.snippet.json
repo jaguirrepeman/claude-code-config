@@ -61,8 +61,6 @@
       "Bash(git checkout .:*)",
       "Bash(git stash drop:*)",
       "Bash(git stash clear:*)",
-      "Bash(git branch -D:*)",
-      "Bash(git branch *-D *)",
       "Bash(git worktree remove *--force*)",
       "Bash(git worktree remove -f *)"
     ],

@@ -354,3 +354,93 @@ def test_pending_guard_never_fails_on_bad_input(tmp_path: Path) -> None:
         timeout=30,
     )
     assert (r.returncode, r.stdout.strip()) == (0, "")
+
+
+# --- guard-branch-delete --------------------------------------------------------------------
+
+
+def work_branch(repo: Path, name: str, filename: str) -> None:
+    """Rama con un commit propio que `main` no tiene, y vuelta a `main`."""
+    git("checkout", "-q", "-b", name, cwd=repo)
+    (repo / filename).write_text(f"{name}\n", encoding="utf-8")
+    git("add", filename, cwd=repo)
+    git("commit", "-q", "-m", name, cwd=repo)
+    git("checkout", "-q", "main", cwd=repo)
+
+
+def reason(stdout: str) -> str:
+    return json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_force_delete_of_unmerged_branch_asks(repo: Path) -> None:
+    work_branch(repo, "claude/x", "x.txt")
+    code, out = run_hook("guard-branch-delete.py", bash("git branch -D claude/x", repo), repo)
+    assert code == 0
+    assert decision(out) == "ask"
+    assert "claude/x" in reason(out)
+
+
+def test_force_delete_of_merged_branch_passes(repo: Path) -> None:
+    work_branch(repo, "claude/x", "x.txt")
+    git("merge", "-q", "--no-edit", "claude/x", cwd=repo)
+    code, out = run_hook("guard-branch-delete.py", bash("git branch -D claude/x", repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_force_delete_of_squash_merged_branch_passes(repo: Path) -> None:
+    # Tras un squash la rama no es antecesora de main (por eso hace falta -D), pero su
+    # contenido ya está dentro: es el caso normal del gate de CI.
+    work_branch(repo, "claude/x", "x.txt")
+    git("merge", "-q", "--squash", "claude/x", cwd=repo)
+    git("commit", "-q", "-m", "squash", cwd=repo)
+    (repo / "later.txt").write_text("después\n", encoding="utf-8")
+    git("add", "later.txt", cwd=repo)
+    git("commit", "-q", "-m", "later", cwd=repo)
+    code, out = run_hook("guard-branch-delete.py", bash("git branch -D claude/x", repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_only_unmerged_branches_are_named(repo: Path) -> None:
+    work_branch(repo, "claude/done", "done.txt")
+    git("merge", "-q", "--no-edit", "claude/done", cwd=repo)
+    work_branch(repo, "claude/open", "open.txt")
+    cmd = "git fetch --prune && git branch -D claude/done claude/open"
+    _, out = run_hook("guard-branch-delete.py", bash(cmd, repo), repo)
+    assert decision(out) == "ask"
+    assert "claude/open" in reason(out) and "claude/done" not in reason(out)
+
+
+def test_long_force_flags_are_detected(repo: Path) -> None:
+    work_branch(repo, "claude/x", "x.txt")
+    for cmd in ("git branch --delete --force claude/x", "git branch -d -f claude/x"):
+        _, out = run_hook("guard-branch-delete.py", bash(cmd, repo), repo)
+        assert decision(out) == "ask", cmd
+
+
+def test_safe_delete_and_other_branch_commands_pass(repo: Path) -> None:
+    # `-d` sin forzar ya lo frena git si la rama no está fusionada.
+    work_branch(repo, "claude/x", "x.txt")
+    for cmd in ("git branch -d claude/x", "git branch -vv", "git status", "git branch -D no-existe"):
+        code, out = run_hook("guard-branch-delete.py", bash(cmd, repo), repo)
+        assert (code, out) == (0, ""), cmd
+
+
+def test_branch_delete_looks_at_cd_target(repo: Path, other_repo: Path) -> None:
+    git("checkout", "-q", "main", cwd=other_repo)
+    work_branch(other_repo, "claude/y", "y.txt")
+    cmd = f'cd "{other_repo}" && git branch -D claude/y'
+    _, out = run_hook("guard-branch-delete.py", bash(cmd, repo), repo)
+    assert decision(out) == "ask"
+
+
+def test_branch_delete_asks_when_base_is_unknown(tmp_path: Path) -> None:
+    # Sin origin/HEAD, main ni master no hay contra qué comprobar: se pregunta (falla cerrado).
+    git("init", "-q", "-b", "trunk", cwd=tmp_path)
+    git("config", "user.email", "test@example.com", cwd=tmp_path)
+    git("config", "user.name", "Test", cwd=tmp_path)
+    (tmp_path / "a.txt").write_text("a\n", encoding="utf-8")
+    git("add", "a.txt", cwd=tmp_path)
+    git("commit", "-q", "-m", "init", cwd=tmp_path)
+    git("branch", "claude/x", cwd=tmp_path)
+    _, out = run_hook("guard-branch-delete.py", bash("git branch -D claude/x", tmp_path), tmp_path)
+    assert decision(out) == "ask"

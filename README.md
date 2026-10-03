@@ -31,8 +31,9 @@ al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 | `hooks/_target_dir.py` | `~/.claude/hooks/` | Ayuda de los dos hooks anteriores: el repo que se mira es aquel al que va el comando (`cd ../otro && git ...`, `git -C ../otro ...`), no el `cwd` de la sesión |
 | `hooks/pre-push-verify.py` | `~/.claude/hooks/` | `PreToolUse`: antes de un `git push` ejecuta el comando de `.claude/verify-command` del repo y deniega el push si falla. Sin ese fichero no hace nada |
 | `hooks/pending-guard.py` | `~/.claude/hooks/` | `Stop`: si el último mensaje parece un cierre ("Hecho", "fusionado por el gate", "en producción") y deja pendientes sin enlace a un issue, no deja terminar el turno hasta convertirlos en issues (o decir "sin pendientes que guardar"). Solo texto, sin git, milisegundos; bloquea una vez por turno |
-| `hooks/tests/` | (solo este repo) | Tests de los cinco hooks: `pytest -q hooks/tests`. Cada hook se ejecuta como proceso aparte con JSON por stdin, igual que lo lanza Claude Code |
-| `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los cinco scripts |
+| `hooks/guard-branch-delete.py` | `~/.claude/hooks/` | `PreToolUse`: `git branch -D` está en `allow`; este hook pide confirmación solo si la rama no está fusionada en la base (ni antecesora, ni con su contenido ya dentro tras un squash, ni con un PR fusionado en GitHub con esa cabeza). Falla cerrado: si no puede comprobarlo, pregunta |
+| `hooks/tests/` | (solo este repo) | Tests de los seis hooks: `pytest -q hooks/tests`. Cada hook se ejecuta como proceso aparte con JSON por stdin, igual que lo lanza Claude Code |
+| `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los seis scripts |
 | `settings/permissions.snippet.json` | fusionar en `~/.claude/settings.json` | Lista curada de permisos: `allow` para la lectura y el flujo diario de git y gh, `ask` para lo que tira trabajo no guardado, `deny` para lo que se salta el gate y los secretos |
 | `templates/project/` | copiar a la raíz de cada repo | Plantilla de `.claude/` para un repo: `settings.json`, regla por ruta de zonas calientes, `verify-command` y el trozo de `.gitignore`. Ver su README |
 | `templates/project/.claude/skills/pr-gate/` | `.claude/skills/pr-gate/` del repo | Skill que revisa cada PR antes del auto-merge con lo que un test genérico no ve en ese repo (zona caliente con su test, la app arranca, contratos). La ejecuta el job `review` del CI y su veredicto `block` para el merge. Se adapta la sección "Qué comprobar" |
@@ -96,9 +97,12 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
   `stash`, `pull` y `worktree add`/`remove` también van en `allow`: son locales, git los deja
   en el reflog y `worktree remove` se niega solo si hay cambios sin guardar. Lo que sigue
   pidiendo confirmación es lo que tira trabajo no guardado o sin fusionar: `reset --hard`,
-  `checkout -- <ruta>`, `stash drop`/`clear`, `branch -D` y `worktree remove --force`. `branch -D`
-  pregunta también con la rama ya fusionada (la regla no distingue), así que la limpieza tras
-  un squash cuesta una confirmación por rama. `gh pr merge` también va en
+  `checkout -- <ruta>`, `stash drop`/`clear` y `worktree remove --force`. `branch -D` va en
+  `allow` y lo vigila el hook `guard-branch-delete`: una regla no distingue una rama fusionada
+  de una sin fusionar, y un hook no puede saltarse una regla `ask`, así que la regla deja pasar
+  y el hook pregunta solo si la rama no está fusionada. En la máquina corporativa, si allí
+  también se quiere confirmar el borrado de ramas fusionadas, se añade `Bash(git branch -D:*)`
+  a `ask` al fusionar el snippet. `gh pr merge` también va en
   `allow` (decidido el 2026-09-19), para fusionar a mano un PR en verde que el gate no cogió;
   `--auto` sigue denegado porque en un repo privado Free fusiona sin esperar al CI. En la
   máquina corporativa (repo de equipo, sin gate propio) se dejan `git push`, `gh pr create` y
