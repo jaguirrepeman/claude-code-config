@@ -17,6 +17,12 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
   (2) un comando o medida que la falsifique (conteo, tamaño, traza, tiempo), (3) el output real,
   (4) solo entonces el cambio. Nunca afirmar una causa sin haberla medido. Si la evidencia
   contradice la hipótesis, decirlo y pasar a la siguiente.
+- **Mirar el sistema real antes de diseñar sobre él.** Si el diseño depende de algo externo (una
+  página o base de datos de un servicio, un dispositivo, datos de producción, el flujo que de
+  verdad usa la persona), leer su estado real antes de proponer nada, y separar en el plan lo
+  comprobado de lo supuesto. Las restricciones fijas de un proyecto viven en el `CLAUDE.md` de
+  su repo y se releen antes de planificar. Un diseño sobre una estructura imaginada se rehace
+  entero cuando aparece la real.
 - **Plan mode en zonas calientes.** Donde un error no rompe el build sino que cambia un número
   que alguien va a mirar (cálculo, precio, medición), plan mode y no aprobar nada sin leer el
   plan. Cada repo dice cuáles son sus zonas calientes.
