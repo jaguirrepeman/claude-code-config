@@ -5,10 +5,18 @@ Se instala como `~/.claude/machine.md`. Lo importa el `CLAUDE.md` común al fina
 ## Shell y sistema operativo
 
 - **Windows 10 + PowerShell.** Los comandos que se dan para pegar en terminal van en sintaxis
-  PowerShell: `;` para encadenar (nunca `&&` ni `||`), `$env:VAR` para variables, `Set-Content`
-  y `Get-Content` en vez de heredocs, sin `sudo`.
+  PowerShell: `;` para encadenar (nunca `&&` ni `||`), `$env:VAR` para variables, sin `sudo`.
 - No emitir comandos bash (encadenados con `&&`, heredocs, `| tee`) para ejecutar en local:
   fallan o se comportan distinto en PowerShell.
+- **Texto con tildes o ñ en PowerShell (es la 5.1).** `Get-Content` y `Set-Content` sin
+  `-Encoding` leen el UTF-8 como ANSI: un `-replace` con tildes no encuentra nada y no avisa.
+  Con `-Encoding utf8` funciona, pero escribe BOM, que rompe `.bat`, shebangs y algunos
+  parsers de JSON. Para leer y escribir texto, `[IO.File]::ReadAllText` y
+  `[IO.File]::WriteAllText`, que usan UTF-8 sin BOM (comprobado el 2026-10-07).
+- **Lo que escribe Claude con tildes o con barras invertidas, nunca por PowerShell.** Ficheros
+  con Write o Edit; parches con un script Python que lea y escriba en UTF-8; mensajes de commit
+  largos con `git commit -F <fichero>`, no con un here-string de PowerShell. Un heredoc de
+  Git Bash conserva las tildes, pero estropea los escapes de una regex (`\b`, `\1`).
 
 ## Node.js
 
