@@ -492,3 +492,91 @@ def test_branch_delete_with_quoted_name_or_redirect_still_asks(repo: Path) -> No
     for cmd in ('git branch -D "claude/x"', "git branch -D claude/x 2>/dev/null"):
         _, out = run_hook("guard-branch-delete.py", bash(cmd, repo), repo)
         assert decision(out) == "ask", cmd
+
+
+# --- check-action-refs ----------------------------------------------------------------------
+
+FAKE_GH = """
+import sys
+# Imita `gh api repos/<dueño>/<repo>/commits/<ref> --jq .sha` sin red.
+KNOWN = {"astral-sh/setup-uv": {"v6", "main", "a" * 40}}
+if "offline" in sys.argv:
+    sys.exit("error connecting to api.github.com")
+path = next(a for a in sys.argv if a.startswith("repos/"))
+_, owner, repo, _, ref = path.split("/")
+refs = KNOWN.get(f"{owner}/{repo}")
+if refs is None:
+    print('{"message":"Not Found"}'); sys.exit("gh: Not Found (HTTP 404)")
+if ref not in refs:
+    print('{"message":"No commit found for SHA: %s"}' % ref); sys.exit("gh: HTTP 422")
+print("0" * 40)
+"""
+
+
+@pytest.fixture
+def fake_gh(tmp_path: Path) -> list[str]:
+    """Un `gh` que contesta como la API para `astral-sh/setup-uv` (refs `v6`, `main` y un SHA)."""
+    script = tmp_path / "fake_gh.py"
+    script.write_text(FAKE_GH, encoding="utf-8")
+    return [PYTHON, str(script)]
+
+
+def check_refs(workflow: Path, gh: list[str]) -> tuple[int, str]:
+    env = {"ACTION_REFS_GH": json.dumps(gh)}
+    return run_hook("check-action-refs.py", edit(workflow), workflow.parent, env)
+
+
+def write_workflow(tmp_path: Path, body: str) -> Path:
+    wf = tmp_path / ".github" / "workflows" / "ci.yml"
+    wf.parent.mkdir(parents=True, exist_ok=True)
+    wf.write_text(body, encoding="utf-8")
+    return wf
+
+
+def context_of(out: str) -> str:
+    return json.loads(out)["hookSpecificOutput"]["additionalContext"]
+
+
+def test_action_refs_reports_tag_that_does_not_exist(tmp_path: Path, fake_gh: list[str]) -> None:
+    wf = write_workflow(tmp_path, "jobs:\n  t:\n    steps:\n      - uses: astral-sh/setup-uv@v10\n")
+    code, out = check_refs(wf, fake_gh)
+    assert code == 0
+    assert "`astral-sh/setup-uv@v10`: no existe esa etiqueta" in context_of(out)
+
+
+def test_action_refs_silent_when_tags_branches_and_shas_exist(tmp_path: Path, fake_gh: list[str]) -> None:
+    body = (
+        "jobs:\n  t:\n    steps:\n"
+        "      - uses: astral-sh/setup-uv@v6\n"
+        "      - uses: 'astral-sh/setup-uv@main'  # rama\n"
+        f"      - uses: astral-sh/setup-uv@{'a' * 40}\n"
+        "      - uses: ./.github/actions/local\n"
+        "      - uses: docker://alpine:3.20\n"
+    )
+    assert check_refs(write_workflow(tmp_path, body), fake_gh) == (0, "")
+
+
+def test_action_refs_reports_repo_that_does_not_exist(tmp_path: Path, fake_gh: list[str]) -> None:
+    wf = write_workflow(tmp_path, "jobs:\n  t:\n    steps:\n      - uses: actions/setup-pyhton@v5\n")
+    _, out = check_refs(wf, fake_gh)
+    assert "`actions/setup-pyhton@v5`: no existe el repositorio" in context_of(out)
+
+
+def test_action_refs_checks_reusable_and_composite(tmp_path: Path, fake_gh: list[str]) -> None:
+    wf = write_workflow(tmp_path, "jobs:\n  t:\n    uses: astral-sh/setup-uv/.github/workflows/x.yml@v9\n")
+    assert "`astral-sh/setup-uv@v9`" in context_of(check_refs(wf, fake_gh)[1])
+    composite = tmp_path / "action.yml"
+    composite.write_text("runs:\n  steps:\n    - uses: astral-sh/setup-uv@v10\n", encoding="utf-8")
+    assert "`astral-sh/setup-uv@v10`" in context_of(check_refs(composite, fake_gh)[1])
+
+
+def test_action_refs_ignores_files_outside_workflows(tmp_path: Path, fake_gh: list[str]) -> None:
+    other = tmp_path / "notas.yml"
+    other.write_text("uses: astral-sh/setup-uv@v10\n", encoding="utf-8")
+    assert check_refs(other, fake_gh) == (0, "")
+
+
+def test_action_refs_fails_open_without_network_or_gh(tmp_path: Path, fake_gh: list[str]) -> None:
+    wf = write_workflow(tmp_path, "jobs:\n  t:\n    steps:\n      - uses: astral-sh/setup-uv@v10\n")
+    assert check_refs(wf, [*fake_gh, "offline"]) == (0, "")
+    assert check_refs(wf, ["no-existe-este-gh"]) == (0, "")
