@@ -55,6 +55,17 @@
             "statusMessage": "Lint del fichero editado..."
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$HOME/.claude/hooks/check-action-refs.py\"",
+            "timeout": 30,
+            "statusMessage": "Comprobando versiones de GitHub Actions..."
+          }
+        ]
       }
     ],
     "Stop": [
