@@ -16,7 +16,9 @@ Se instala como `~/.claude/machine.md`. Lo importa el `CLAUDE.md` común al fina
 - **Lo que escribe Claude con tildes o con barras invertidas, nunca por PowerShell.** Ficheros
   con Write o Edit; parches con un script Python que lea y escriba en UTF-8; mensajes de commit
   largos con `git commit -F <fichero>`, no con un here-string de PowerShell. Un heredoc de
-  Git Bash conserva las tildes, pero estropea los escapes de una regex (`\b`, `\1`).
+  Git Bash conserva las tildes, pero no las barras: sin comillas (`<<EOF`) convierte `\\` en
+  `\` y `\$` en `$`, y en la herramienta de shell de Claude `\\1` llegó como `\1` incluso con
+  `<<'EOF'` (comprobado el 2026-10-07).
 
 ## Node.js
 
