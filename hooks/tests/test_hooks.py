@@ -332,6 +332,17 @@ def test_pending_guard_ignores_mid_task_messages(tmp_path: Path) -> None:
     assert (code, out) == (0, "")
 
 
+def test_pending_guard_ignores_a_finished_step_in_the_middle_of_the_task(tmp_path: Path) -> None:
+    # "Hecho el paso 1" o "Hecho esto" hablan de un paso, no cierran el hilo: bloquearlos obligaba
+    # a abrir issues de lo que se estaba haciendo en ese momento.
+    for msg in (
+        "Hecho el paso 1 (el parser). Queda por hacer el paso 2: ¿sigo?",
+        "He leído el módulo.\nHecho esto, el pendiente es decidir el nombre. ¿Cuál prefieres?",
+    ):
+        code, out = run_hook("pending-guard.py", stop(msg), tmp_path)
+        assert (code, out) == (0, ""), msg
+
+
 def test_pending_guard_ignores_cierre_not_archivable_verdict(tmp_path: Path) -> None:
     msg = "NO ARCHIVABLE: hay 2 commits sin push y un pendiente sin issue. PR fusionado por el gate."
     code, out = run_hook("pending-guard.py", stop(msg), tmp_path)
