@@ -45,7 +45,7 @@
       # `--locked` para que un lock desactualizado falle en vez de resolverse en silencio, la
       # versión de uv fijada a la misma que en local, y el `.python-version` del repo decide el
       # intérprete). Son los mismos pasos que lleva el job `tests`.
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0  # setup-uv no publica la etiqueta corta v10
         if: steps.token.outputs.present == 'true'
         with:
           version: "0.12.17"               # ADAPTAR: la de `uv --version` en local

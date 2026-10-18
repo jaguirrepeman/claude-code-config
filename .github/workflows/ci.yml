@@ -30,6 +30,19 @@ jobs:
       - run: ruff check .
       - run: ruff format --check hooks
       - run: pytest -q hooks/tests
+      # Las versiones de las actions de los workflows y de la plantilla tienen que existir: la
+      # plantilla llevó `setup-uv@v10`, que no existe, y el hook que lo detecta solo salta al
+      # editar el fichero. Se pasa cada fichero por ese mismo hook y falla si dice algo.
+      - name: Action versions exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          for f in $(git ls-files '*.github/workflows/*.yml' '*.github/workflows/*.yaml'); do
+            out=$(printf '{"tool_input":{"file_path":"%s"}}' "$f" | python hooks/check-action-refs.py)
+            if [ -n "$out" ]; then echo "$f: $out"; status=1; fi
+          done
+          exit $status
 
   auto-merge:
     name: Auto-merge on green
