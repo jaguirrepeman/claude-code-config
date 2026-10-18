@@ -108,7 +108,11 @@ def main() -> None:
     # repo que se verifica es aquel en el que va a correr, que puede no ser el de la sesión (#21).
     roots: list[Path] = []
     for call in git_calls(command, payload.get("cwd") or None):
-        if call.sub == "push" and (top := git("rev-parse", "--show-toplevel", cwd=call.cwd)):
+        # Un repo que crea el propio comando (init, clone, worktree) aún no existe y no se puede
+        # verificar: sin veredicto, el push pasa, como en cualquier otro fallo de detección.
+        if call.sub != "push" or call.new_repo:
+            continue
+        if top := git("rev-parse", "--show-toplevel", cwd=call.cwd):
             if Path(top) not in roots:
                 roots.append(Path(top))
     for root in roots:

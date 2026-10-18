@@ -60,7 +60,9 @@ def force_deleted_branches(command: str, cwd: str | None) -> dict[str | None, li
     """Ramas locales que el comando borra a la fuerza, agrupadas por el repo en el que se borran."""
     names: dict[str | None, list[str]] = {}
     for call in git_calls(command, cwd):
-        if call.sub != "branch":
+        # En un repo que acaba de crear el comando (init, clone) no hay ramas locales con trabajo
+        # propio que perder. Un worktree nuevo sí comparte las del repo de origen.
+        if call.sub != "branch" or call.new_repo in {"init", "clone"}:
             continue
         tokens = call.args
         long_flags = {t for t in tokens if t.startswith("--")}

@@ -15,9 +15,12 @@ a subcomando: un `cd` en cualquier posición, `git -C` (solo para su llamada), l
 (`R=...; cd "$R"`). Las rutas al estilo Git Bash en Windows (`/d/x`) se convierten a `D:/x`,
 porque el hook corre con el Python de Windows.
 
-Un `cd` a un directorio que no existe no cambia nada, salvo que el propio comando lo cree antes
-(`mkdir`, `git init`, `git clone`, `git worktree add`): entonces la llamada se marca con ese
-directorio aunque aún no exista, y los hooks, que no pueden mirar su rama, la dejan pasar.
+Un `cd` a un directorio que no existe no cambia nada, salvo que el propio comando lo cree antes.
+Qué se mira entonces depende de cómo lo crea, porque el hook corre antes y no lo puede abrir:
+con `mkdir`, el directorio sigue dentro del repo que lo rodea (git sube hasta él), así que se
+mira ese repo. Con `git worktree add`, el worktree comparte las ramas del repo de origen. Con
+`git init` o `git clone` es un repo nuevo: la llamada se marca así, con la rama que diga el
+propio comando (`-b`, un `checkout -b` posterior, o la por defecto del remoto en un clon).
 Nunca se inventa un directorio.
 
 Lo que se deja fuera a propósito: un git dentro de `bash -c "..."`, `ssh host '...'` o `$(...)`
@@ -47,10 +50,20 @@ FALLBACK_SPLIT = re.compile(r"&&|\|\||[;|()]")
 OPEN, CLOSE = "(", ")"
 
 
+# Rama de un clon recién hecho sin `-b`: la por defecto del remoto, protegida por definición.
+REMOTE_DEFAULT = "<rama por defecto del remoto>"
+
+
 class GitCall(NamedTuple):
     sub: str
     args: list[str]
+    # Directorio existente desde el que git buscará el repo: el de la llamada, o el antecesor más
+    # cercano si el propio comando lo crea con `mkdir`. En un worktree nuevo, el repo de origen.
     cwd: str | None
+    # "init", "clone" o "worktree" si la llamada va a un repo que crea el mismo comando, que aún
+    # no existe cuando corre el hook; su rama, si el comando la dice, va en `branch`.
+    new_repo: str | None = None
+    branch: str | None = None
 
 
 def _tokens(text: str) -> list[str]:
@@ -102,33 +115,109 @@ def _resolve(path: str, here: str | None, variables: dict[str, str]) -> str | No
     return os.path.normpath(path)
 
 
-def _created_by_git(sub: str, args: list[str]) -> list[str]:
-    """Directorios que crea una llamada a git: `init <dir>`, `clone <url> [dir]`, `worktree add <dir>`."""
-    positional = [a for a in args if not a.startswith("-")]
-    if sub == "init":
-        return positional[:1]
-    if sub == "clone" and positional:
-        default = positional[0].rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
-        return [positional[1] if len(positional) > 1 else default]
-    if sub == "worktree" and positional[:1] == ["add"] and len(positional) > 1:
-        return [positional[1]]
-    return []
+# Opciones que llevan valor, para no confundir ese valor con una ruta o una rama.
+VALUED = {
+    "init": {"-b", "--initial-branch", "--template", "--separate-git-dir", "--object-format", "--ref-format"},
+    "clone": {
+        "-b",
+        "--branch",
+        "-o",
+        "--origin",
+        "-u",
+        "--upload-pack",
+        "--reference",
+        "--reference-if-able",
+        "--depth",
+        "--shallow-since",
+        "--shallow-exclude",
+        "-c",
+        "--config",
+        "-j",
+        "--jobs",
+        "--template",
+        "--separate-git-dir",
+        "--filter",
+        "--server-option",
+        "--bundle-uri",
+        "--revision",
+    },
+    "worktree": {"-b", "-B", "--reason"},
+    "checkout": {"-b", "-B", "--orphan"},
+    "switch": {"-c", "-C", "--create", "--force-create", "--orphan"},
+}
+NEW_BRANCH = {
+    "checkout": ("-b", "-B", "--orphan"),
+    "switch": ("-c", "-C", "--create", "--force-create", "--orphan"),
+}
+
+
+def _options(sub: str, args: list[str]) -> tuple[list[str], dict[str, str]]:
+    """Posicionales y opciones (con su valor, si lo llevan) de una llamada a git."""
+    valued = VALUED.get(sub, set())
+    positional: list[str] = []
+    options: dict[str, str] = {}
+    rest = iter(args)
+    for arg in rest:
+        if arg == "--":
+            positional += list(rest)
+        elif arg.startswith("-") and arg != "-":
+            name, eq, value = arg.partition("=")
+            options[name] = value if eq else (next(rest, "") if name in valued else "")
+        else:
+            positional.append(arg)
+    return positional, options
+
+
+def _first(options: dict[str, str], *names: str) -> str | None:
+    return next((options[n] for n in names if n in options), None)
+
+
+class _NewRepo:
+    """Un repo que crea el propio comando y que aún no existe cuando corre el hook."""
+
+    def __init__(self, kind: str, stand_in: str | None, branch: str | None) -> None:
+        self.kind = kind
+        self.stand_in = stand_in
+        self.branch = branch
+
+
+def _existing(path: str | None) -> str | None:
+    """`path`, o su antecesor más cercano que exista: el sitio desde el que git buscará el repo."""
+    while path and not os.path.isdir(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            return None
+        path = parent
+    return path or None
+
+
+def _inside(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
 def git_calls(command: str, cwd: str | None = None) -> list[GitCall]:
     """Cada `git` que ejecuta el comando, en orden, con el directorio en el que correrá."""
     calls: list[GitCall] = []
-    here = cwd
+    here = previous = os.path.normpath(cwd) if cwd else cwd
     stack: list[str | None] = []
     variables: dict[str, str] = {}
     created: set[str] = set()
+    new_repos: dict[str, _NewRepo] = {}
 
     def move(path: str, base: str | None) -> str | None:
         """El directorio al que lleva `path` desde `base`, o `base` si no existe ni se crea."""
         target = _resolve(path, base, variables)
-        if target and (os.path.isdir(target) or target in created):
+        if target is None:
+            return base
+        if os.path.isdir(target) or any(_inside(p, target) or _inside(target, p) for p in created):
+            return target
+        if any(_inside(target, p) for p in new_repos):
             return target
         return base
+
+    def new_repo_at(path: str | None) -> _NewRepo | None:
+        roots = [p for p in new_repos if path and _inside(path, p)]
+        return new_repos[max(roots, key=len)] if roots else None
 
     for segment in _segments(command):
         if segment == OPEN:
@@ -154,8 +243,7 @@ def git_calls(command: str, cwd: str | None = None) -> list[GitCall]:
         program = os.path.basename(words[0]).lower()
         if program == "cd":
             target = words[1] if len(words) > 1 else "~"
-            if target != "-":
-                here = move(target, here)
+            here, previous = (previous, here) if target == "-" else (move(target, here), here)
             continue
         if program == "mkdir":
             created.update(
@@ -180,6 +268,55 @@ def git_calls(command: str, cwd: str | None = None) -> list[GitCall]:
                 args = args[: j - 1] if j and args[j - 1].isdigit() else args[:j]
                 break
         sub = words[i]
-        created.update(p for d in _created_by_git(sub, args) if (p := _resolve(d, call_dir, variables)))
-        calls.append(GitCall(sub, args, call_dir))
+        fresh = new_repo_at(call_dir)
+        # Un subdirectorio que crea el comando sigue dentro del repo que lo rodea: git sube hasta
+        # él. Un repo que crea el comando (init, clone, worktree) no se puede mirar todavía.
+        real_dir = fresh.stand_in if fresh else _existing(call_dir)
+        kind, branch = (fresh.kind, fresh.branch) if fresh else (None, None)
+        calls.append(GitCall(sub, args, real_dir, kind, branch))
+        _track(sub, args, call_dir, real_dir, fresh, new_repos, variables)
     return calls
+
+
+def _track(
+    sub: str,
+    args: list[str],
+    call_dir: str | None,
+    real_dir: str | None,
+    fresh: _NewRepo | None,
+    new_repos: dict[str, _NewRepo],
+    variables: dict[str, str],
+) -> None:
+    """Apunta los repos que crea esta llamada y los cambios de rama dentro de ellos."""
+    positional, options = _options(sub, args)
+    if sub == "init":
+        target = _resolve(positional[0], call_dir, variables) if positional else call_dir
+        # Reinicializar un repo que ya existe no cambia nada: sigue siendo ese repo.
+        if target and not os.path.exists(os.path.join(target, ".git")):
+            branch = _first(options, "-b", "--initial-branch")
+            new_repos[target] = _NewRepo("init", _existing(target), branch)
+    elif sub == "clone" and positional:
+        if len(positional) > 1:
+            name = positional[1]
+        else:
+            name = positional[0].rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
+        if target := _resolve(name, call_dir, variables):
+            branch = _first(options, "-b", "--branch") or REMOTE_DEFAULT
+            new_repos[target] = _NewRepo("clone", _existing(target), branch)
+    elif sub == "worktree" and positional[:1] == ["add"] and len(positional) > 1:
+        if target := _resolve(positional[1], call_dir, variables):
+            # Sin `-b` ni `--detach`, git usa la rama que se le pasa o crea una con el nombre de
+            # la carpeta.
+            branch = _first(options, "-b", "-B")
+            if branch is None and "--detach" not in options:
+                branch = positional[2] if len(positional) > 2 else os.path.basename(target)
+            # Un worktree comparte las ramas del repo desde el que se crea.
+            new_repos[target] = _NewRepo("worktree", real_dir, branch)
+    elif fresh and sub in NEW_BRANCH:
+        created_branch = _first(options, *NEW_BRANCH[sub])
+        if created_branch:
+            fresh.branch = created_branch
+        elif "--detach" in options or "-d" in options:
+            fresh.branch = None
+        elif positional:
+            fresh.branch = positional[0]
