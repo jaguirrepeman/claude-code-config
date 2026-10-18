@@ -494,6 +494,55 @@ def test_branch_delete_with_quoted_name_or_redirect_still_asks(repo: Path) -> No
         assert decision(out) == "ask", cmd
 
 
+# --- directorio de cada llamada a git (issue #21) -------------------------------------------
+
+
+def test_branch_delete_follows_cd_that_is_not_first(repo: Path, other_repo: Path) -> None:
+    # Con el `cd` en segunda posición el hook miraba el repo de la sesión, no encontraba la rama
+    # y el borrado de una rama sin fusionar pasaba sin preguntar.
+    git("checkout", "-q", "main", cwd=other_repo)
+    work_branch(other_repo, "claude/y", "y.txt")
+    cmd = f'git status; cd "{other_repo}"; git branch -D claude/y'
+    _, out = run_hook("guard-branch-delete.py", bash(cmd, repo), repo)
+    assert decision(out) == "ask"
+
+
+def test_commit_follows_cd_that_is_not_first(repo: Path, other_repo: Path) -> None:
+    for cmd in (
+        f'echo hola; cd "{other_repo}"; git commit -m x',
+        f'D="{other_repo}"; cd "$D" && git commit -m x',
+        f'(cd "{other_repo}" && git commit -m x)',
+    ):
+        code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+        assert (code, out) == (0, ""), cmd
+
+
+def test_commit_into_repo_created_by_the_same_command_passes(repo: Path, tmp_path: Path) -> None:
+    # El caso del #21: el repo aún no existe cuando corre el hook, así que no hay rama que mirar.
+    new = tmp_path / "nuevo"
+    cmd = f'R="{new}"; mkdir -p "$R"; cd "$R"; git init -q -b claude/t; git commit -m x'
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_each_commit_is_checked_in_its_own_directory(repo: Path, other_repo: Path) -> None:
+    # El `-C` o el subshell valen solo para su llamada: el commit de después va al repo de la
+    # sesión, que está en main.
+    for cmd in (
+        f'git -C "{other_repo}" status && git commit -m x',
+        f'(cd "{other_repo}" && git status); git commit -m x',
+    ):
+        _, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+        assert decision(out) == "deny", cmd
+
+
+def test_push_follows_cd_that_is_not_first(repo: Path, other_repo: Path) -> None:
+    write_verify(other_repo, f'"{PYTHON}" -c "import sys; print(\'rojo\'); sys.exit(3)"')
+    cmd = f'git status; cd "{other_repo}"; git push'
+    _, out = run_hook("pre-push-verify.py", bash(cmd, repo), repo)
+    assert decision(out) == "deny"
+
+
 # --- check-action-refs ----------------------------------------------------------------------
 
 FAKE_GH = """

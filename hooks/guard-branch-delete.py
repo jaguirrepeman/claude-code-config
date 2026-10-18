@@ -36,7 +36,6 @@ import sys
 from typing import Any
 
 from _git_calls import git_calls
-from _target_dir import target_dir
 
 TIMEOUT_GIT = 5
 TIMEOUT_GH = 10
@@ -57,12 +56,13 @@ def git(*args: str, cwd: str | None) -> str | None:
     return run(["git", *args], cwd, TIMEOUT_GIT)
 
 
-def force_deleted_branches(command: str) -> list[str]:
-    """Ramas locales que el comando borra a la fuerza, en todos sus subcomandos."""
-    names: list[str] = []
-    for sub, tokens in git_calls(command):
-        if sub != "branch":
+def force_deleted_branches(command: str, cwd: str | None) -> dict[str | None, list[str]]:
+    """Ramas locales que el comando borra a la fuerza, agrupadas por el repo en el que se borran."""
+    names: dict[str | None, list[str]] = {}
+    for call in git_calls(command, cwd):
+        if call.sub != "branch":
             continue
+        tokens = call.args
         long_flags = {t for t in tokens if t.startswith("--")}
         short = "".join(t[1:] for t in tokens if t.startswith("-") and not t.startswith("--"))
         if "r" in short or "--remotes" in long_flags:
@@ -71,7 +71,7 @@ def force_deleted_branches(command: str) -> list[str]:
         delete = "d" in short or "D" in short or "--delete" in long_flags
         force = "D" in short or "f" in short or "--force" in long_flags
         if delete and force:
-            names += [t for t in tokens if not t.startswith("-")]
+            names.setdefault(call.cwd, []).extend(t for t in tokens if not t.startswith("-"))
     return names
 
 
@@ -119,10 +119,16 @@ def ask(reason: str) -> None:
 
 
 def check(command: str, cwd: str | None) -> None:
-    names = force_deleted_branches(command)
-    if not names:
-        return
-    cwd = target_dir(command, cwd)
+    # Cada borrado se comprueba en su repo: un `cd` o un `-C` puede llevarlo a otro (issue #21).
+    for repo, names in force_deleted_branches(command, cwd).items():
+        reason = unsafe_reason(names, repo)
+        if reason:
+            ask(reason)
+            return
+
+
+def unsafe_reason(names: list[str], cwd: str | None) -> str | None:
+    """Por qué no se puede dar por seguro el borrado de estas ramas en `cwd`, o None si es seguro."""
     existing = {
         n: sha
         for n in names
@@ -130,21 +136,21 @@ def check(command: str, cwd: str | None) -> None:
     }
     if not existing:
         # Ninguna existe: git dará error solo, no hay trabajo que perder.
-        return
+        return None
     base_refs = bases(cwd)
     if not base_refs:
-        ask(
+        return (
             "No encuentro rama base (origin/HEAD, main o master) para comprobar si "
             f"{', '.join(existing)} está fusionada. Confirma el borrado forzado."
         )
-        return
     unmerged = [n for n, sha in existing.items() if not is_merged(sha, n, base_refs, cwd)]
     if unmerged:
-        ask(
+        return (
             f"{', '.join(unmerged)} no está fusionada en {base_refs[0]}: ni es antecesora, ni su "
             "contenido está ya dentro, ni hay un PR fusionado con esa cabeza. Borrarla con -D "
             "pierde esos commits. Si se fusionó hace poco, haz antes git fetch --prune."
         )
+    return None
 
 
 def main() -> None:
@@ -152,7 +158,7 @@ def main() -> None:
     if payload.get("tool_name") != "Bash":
         return
     command = payload.get("tool_input", {}).get("command", "")
-    if not isinstance(command, str) or not force_deleted_branches(command):
+    if not isinstance(command, str) or not force_deleted_branches(command, None):
         return
     try:
         check(command, payload.get("cwd") or None)
