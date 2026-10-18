@@ -7,7 +7,8 @@ pendientes", el hilo se archiva y X e Y se pierden. La regla de convertirlos en 
 Cómo decide, solo mirando el texto del último mensaje (`last_assistant_message`), sin git ni red,
 en milisegundos:
 
-1. El mensaje parece un cierre (empieza por "Hecho", dice "fusionado por el gate", "en
+1. El mensaje parece un cierre (una línea empieza por "Hecho", pero no "Hecho el paso 1" ni
+   "Hecho esto", que cierran un paso; o dice "fusionado por el gate", "en
    producción", "MERGED" o "ARCHIVABLE").
 2. Menciona pendientes ("pendiente", "queda por", "sin verificar", "no he tocado").
 3. No lleva ningún enlace o referencia a un issue, y no es el veredicto "NO ARCHIVABLE" de
@@ -35,7 +36,8 @@ import sys
 from typing import Any
 
 CLOSING = re.compile(
-    r"(?m)^\W{0,3}Hecho\b"
+    # "Hecho el paso 1" o "Hecho esto, ..." cierran un paso, no el hilo.
+    r"(?m)^\W{0,3}Hecho\b(?!\s+(?:el|la|los|las|lo|esto|eso|un|una|uno)\b)"
     r"|\bfusionad[oa]s?\s+(?:por el gate|e instalad|y desplegad|y en producci)"
     r"|\ben producci[oó]n\b"
     r"|\bMERGED\b"
