@@ -515,6 +515,9 @@ def main() -> int:
     ap.add_argument("--json", action="store_true", help="counts as JSON, one object per file")
     args = ap.parse_args()
     ignore = {s.strip() for s in args.ignore.split(",") if s.strip()}
+    # En Windows, con la salida a una tubería, Python escribe en cp1252, y las líneas citadas
+    # traen justo los caracteres que se buscan (flechas, emojis, rayas).
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     total: Counter = Counter()
     report: dict[str, dict] = {}
