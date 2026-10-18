@@ -494,6 +494,101 @@ def test_branch_delete_with_quoted_name_or_redirect_still_asks(repo: Path) -> No
         assert decision(out) == "ask", cmd
 
 
+# --- directorio de cada llamada a git (issue #21) -------------------------------------------
+
+
+def test_branch_delete_follows_cd_that_is_not_first(repo: Path, other_repo: Path) -> None:
+    # Con el `cd` en segunda posición el hook miraba el repo de la sesión, no encontraba la rama
+    # y el borrado de una rama sin fusionar pasaba sin preguntar.
+    git("checkout", "-q", "main", cwd=other_repo)
+    work_branch(other_repo, "claude/y", "y.txt")
+    cmd = f'git status; cd "{other_repo}"; git branch -D claude/y'
+    _, out = run_hook("guard-branch-delete.py", bash(cmd, repo), repo)
+    assert decision(out) == "ask"
+
+
+def test_commit_follows_cd_that_is_not_first(repo: Path, other_repo: Path) -> None:
+    for cmd in (
+        f'echo hola; cd "{other_repo}"; git commit -m x',
+        f'D="{other_repo}"; cd "$D" && git commit -m x',
+        f'(cd "{other_repo}" && git commit -m x)',
+    ):
+        code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+        assert (code, out) == (0, ""), cmd
+
+
+def test_commit_into_repo_created_by_the_same_command_passes(repo: Path, tmp_path: Path) -> None:
+    # El caso del #21: el repo aún no existe cuando corre el hook, así que no hay rama que mirar.
+    new = tmp_path / "nuevo"
+    cmd = f'R="{new}"; mkdir -p "$R"; cd "$R"; git init -q -b claude/t; git commit -m x'
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_each_commit_is_checked_in_its_own_directory(repo: Path, other_repo: Path) -> None:
+    # El `-C` o el subshell valen solo para su llamada: el commit de después va al repo de la
+    # sesión, que está en main.
+    for cmd in (
+        f'git -C "{other_repo}" status && git commit -m x',
+        f'(cd "{other_repo}" && git status); git commit -m x',
+    ):
+        _, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+        assert decision(out) == "deny", cmd
+
+
+def test_subdir_created_by_the_command_belongs_to_the_repo_around_it(repo: Path) -> None:
+    # `mkdir -p out && cd out` no sale del repo: git sube hasta él. Mirar `out`, que aún no
+    # existe, dejaba pasar el borrado, el commit en main y el push sin verificar.
+    work_branch(repo, "claude/x", "x.txt")
+    _, out = run_hook(
+        "guard-branch-delete.py", bash("mkdir -p out && cd out && git branch -D claude/x", repo), repo
+    )
+    assert decision(out) == "ask"
+    _, out = run_hook(
+        "block-commit-on-protected.py", bash("mkdir -p a/b && cd a/b && git commit -m x", repo), repo
+    )
+    assert decision(out) == "deny"
+    write_verify(repo, f'"{PYTHON}" -c "import sys; sys.exit(3)"')
+    _, out = run_hook("pre-push-verify.py", bash("mkdir -p out && cd out && git push", repo), repo)
+    assert decision(out) == "deny"
+
+
+def test_worktree_created_by_the_command_shares_its_branches(repo: Path) -> None:
+    work_branch(repo, "claude/x", "x.txt")
+    wt = (repo.parent / f"{repo.name}-wt").as_posix()
+    cmd = f'git worktree add --detach "{wt}" && cd "{wt}" && git branch -D claude/x'
+    _, out = run_hook("guard-branch-delete.py", bash(cmd, repo), repo)
+    assert decision(out) == "ask"
+    # Y su rama es la del `-b`, no la del repo de la sesión.
+    cmd = f'git worktree add -b claude/w "{wt}" && cd "{wt}" && git commit -m x'
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+    assert (code, out) == (0, "")
+
+
+def test_commit_in_a_fresh_clone_is_on_its_default_branch(repo: Path, other_repo: Path) -> None:
+    clone = (other_repo.parent / f"{other_repo.name}-clone").as_posix()
+    cmd = f'git clone -q "{repo.as_posix()}" "{clone}" && cd "{clone}" && git commit -m x'
+    _, out = run_hook("block-commit-on-protected.py", bash(cmd, other_repo), other_repo)
+    assert decision(out) == "deny"
+    cmd = f'git clone "{repo.as_posix()}" "{clone}" && cd "{clone}"'
+    cmd += " && git checkout -b claude/t && git commit -m x"
+    code, out = run_hook("block-commit-on-protected.py", bash(cmd, other_repo), other_repo)
+    assert (code, out) == (0, "")
+
+
+def test_cd_dash_goes_back(repo: Path, other_repo: Path) -> None:
+    cmd = f'cd "{other_repo}"; cd -; git commit -m x'
+    _, out = run_hook("block-commit-on-protected.py", bash(cmd, repo), repo)
+    assert decision(out) == "deny"
+
+
+def test_push_follows_cd_that_is_not_first(repo: Path, other_repo: Path) -> None:
+    write_verify(other_repo, f'"{PYTHON}" -c "import sys; print(\'rojo\'); sys.exit(3)"')
+    cmd = f'git status; cd "{other_repo}"; git push'
+    _, out = run_hook("pre-push-verify.py", bash(cmd, repo), repo)
+    assert decision(out) == "deny"
+
+
 # --- check-action-refs ----------------------------------------------------------------------
 
 FAKE_GH = """

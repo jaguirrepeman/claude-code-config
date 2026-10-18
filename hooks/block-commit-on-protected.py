@@ -35,8 +35,7 @@ import subprocess
 import sys
 from typing import Any
 
-from _git_calls import git_calls
-from _target_dir import target_dir
+from _git_calls import REMOTE_DEFAULT, GitCall, git_calls
 
 TIMEOUT_GIT = 5
 
@@ -67,6 +66,16 @@ def protected_branches(cwd: str | None) -> set[str]:
     }
 
 
+def protected_in_new_repo(call: GitCall) -> set[str]:
+    """Ramas protegidas de un repo que aún no existe: las del de origen si es un worktree."""
+    configured = os.environ.get("CLAUDE_PROTECTED_BRANCHES", "")
+    if configured.strip():
+        return {b.strip() for b in configured.split(",") if b.strip()}
+    if call.new_repo == "worktree":
+        return protected_branches(call.cwd)
+    return {"main", "master"}
+
+
 def deny(reason: str) -> None:
     """Escribe la decisión de denegar. Es lo único que puede salir por stdout."""
     payload = {
@@ -86,25 +95,28 @@ def main() -> None:
         return
 
     command = payload.get("tool_input", {}).get("command", "")
-    # Un `git commit` que se ejecuta, no uno que aparece dentro de un texto (issue #19).
-    if not isinstance(command, str) or not any(sub == "commit" for sub, _ in git_calls(command)):
+    if not isinstance(command, str):
         return
-
-    # El repo que importa es aquel en el que va a correr el comando, que puede no ser el de la
-    # sesión (`cd ../otro && git ...`, `git -C ../otro ...`).
-    cwd = target_dir(command, payload.get("cwd") or None)
-    branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
-    if branch is None:
-        # No se pudo determinar la rama: se deja pasar, nunca se bloquea por un fallo de detección.
-        return
-
-    if branch in protected_branches(cwd):
-        deny(
-            f"Commit bloqueado: la rama activa es {branch}, y en {branch} no commitea nadie. "
-            "Abre una rama corta con el prefijo que toque (claude/tema, feature/tema, fix/tema o "
-            "docs/tema), repite el commit ahí e integra con squash cuando la verificación esté "
-            "en verde."
-        )
+    # Un `git commit` que se ejecuta, no uno que aparece dentro de un texto (issue #19), mirado en
+    # el repo en el que va a correr, que puede no ser el de la sesión (issue #21).
+    for call in git_calls(command, payload.get("cwd") or None):
+        if call.sub != "commit":
+            continue
+        if call.new_repo:
+            # Un repo que crea el propio comando: su rama es la que dice el comando.
+            branch, protected = call.branch, protected_in_new_repo(call)
+        else:
+            branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=call.cwd)
+            protected = protected_branches(call.cwd) if branch is not None else set()
+        # Sin rama no se bloquea: nunca se frena por un fallo de detección.
+        if branch is not None and (branch == REMOTE_DEFAULT or branch in protected):
+            deny(
+                f"Commit bloqueado: la rama activa es {branch}, y en {branch} no commitea nadie. "
+                "Abre una rama corta con el prefijo que toque (claude/tema, feature/tema, fix/tema o "
+                "docs/tema), repite el commit ahí e integra con squash cuando la verificación esté "
+                "en verde."
+            )
+            return
 
 
 if __name__ == "__main__":
