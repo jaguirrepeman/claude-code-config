@@ -37,7 +37,6 @@ from pathlib import Path
 from typing import Any
 
 from _git_calls import git_calls
-from _target_dir import target_dir
 
 TIMEOUT_GIT = 5
 DEFAULT_TIMEOUT = 540
@@ -103,21 +102,27 @@ def main() -> None:
     if payload.get("tool_name") != "Bash":
         return
     command = payload.get("tool_input", {}).get("command", "")
-    # Un `git push` que se ejecuta aquí: no uno dentro de un texto ni de un `ssh` (issue #19).
-    if not isinstance(command, str) or not any(sub == "push" for sub, _ in git_calls(command)):
+    if not isinstance(command, str):
         return
+    # Un `git push` que se ejecuta aquí: no uno dentro de un texto ni de un `ssh` (issue #19). El
+    # repo que se verifica es aquel en el que va a correr, que puede no ser el de la sesión (#21).
+    roots: list[Path] = []
+    for call in git_calls(command, payload.get("cwd") or None):
+        # Un repo que crea el propio comando (init, clone, worktree) aún no existe y no se puede
+        # verificar: sin veredicto, el push pasa, como en cualquier otro fallo de detección.
+        if call.sub != "push" or call.new_repo:
+            continue
+        if top := git("rev-parse", "--show-toplevel", cwd=call.cwd):
+            if Path(top) not in roots:
+                roots.append(Path(top))
+    for root in roots:
+        cmd = verify_command(root)
+        if cmd is not None and verify(cmd, root):
+            return
 
-    # El repo que importa es aquel en el que va a correr el comando, que puede no ser el de la
-    # sesión (`cd ../otro && git ...`, `git -C ../otro ...`).
-    cwd = target_dir(command, payload.get("cwd") or None)
-    top = git("rev-parse", "--show-toplevel", cwd=cwd)
-    if top is None:
-        return
-    root = Path(top)
-    cmd = verify_command(root)
-    if cmd is None:
-        return
 
+def verify(cmd: str, root: Path) -> bool:
+    """Corre la verificación de `root`; si falla con prueba, bloquea el push y devuelve True."""
     try:
         r = subprocess.run(
             cmd,
@@ -131,12 +136,12 @@ def main() -> None:
         )
     except subprocess.TimeoutExpired:
         # Sin veredicto no hay prueba de fallo: se deja pasar, y el CI sigue siendo el gate.
-        return
+        return False
     except OSError:
-        return
+        return False
 
     if r.returncode == 0:
-        return
+        return False
 
     output = tail(((r.stdout or "") + (r.stderr or "")).strip())
     deny(
@@ -144,6 +149,7 @@ def main() -> None:
         "Arregla lo que falla y repite el push; no desactives el hook ni saltes tests.\n\n"
         f"{output}"
     )
+    return True
 
 
 if __name__ == "__main__":
