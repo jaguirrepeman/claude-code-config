@@ -8,7 +8,7 @@ allowed-tools: Bash(python ${CLAUDE_SKILL_DIR}/scripts/pick.py *)
 
 # /mejora: auditar a issues, arreglar a PR draft
 
-Corre sin nadie delante. Por eso hay dos reglas que no se negocian, y mandan sobre cualquier
+Corre sin nadie delante. Por eso hay tres reglas que no se negocian, y mandan sobre cualquier
 otra cosa de este fichero:
 
 1. **Nunca pasa de PR en draft.** En estos repos un PR que no es draft lo fusiona el gate y
@@ -17,6 +17,14 @@ otra cosa de este fichero:
 2. **Ante la duda, para y deja constancia.** Si algo no cuadra (verificación en rojo antes de
    tocar nada, issue ambiguo, el arreglo toca una zona caliente, falta una herramienta), no se
    improvisa: se comenta en el issue lo que se vio, con la salida real, y se termina el turno.
+3. **Todo en primer plano, en un solo turno.** Una ejecución programada acaba cuando acaba tu
+   turno, y nada la vuelve a despertar. Así que nada de subagentes (la herramienta Agent los
+   lanza en segundo plano) ni de comandos con `run_in_background`, y nunca se cierra el turno
+   "esperando" algo. Los comandos largos (la verificación de un repo) van con `timeout: 600000`,
+   para que la herramienta Bash no los pase sola a segundo plano a los dos minutos. Medido el
+   2026-11-01: la auditoría de atril lanzó `repo-auditor` en segundo plano, cerró el turno a los
+   tres minutos y la ejecución terminó sin crear ningún issue, con el subagente aún trabajando.
+   Esta sesión ya es un contexto limpio dedicado solo a esto: no hace falta otro.
 
 Modo pedido: `$ARGUMENTS` (la primera palabra es `auditar` o `arreglar`).
 
@@ -53,10 +61,12 @@ Sin editar nada en el repo. El único efecto son issues en GitHub y la marca de 
 2. **Contexto del repo.** Lee su `CLAUDE.md`, su `.claude/verify-command` y sus
    `.claude/rules/*.md`. Los `paths:` de las reglas de zona caliente son la lista de ficheros que
    nunca llevan `audit-autonomo`.
-3. **Auditoría.** Lanza el subagente `repo-auditor` sobre esa copia con la lista de "Qué revisar"
-   y "Cómo verificar cada hallazgo" de la skill `/audit` (léela en
-   `~/.claude/skills/audit/SKILL.md`) y pídele la tabla de criticidad. Además, que corra la
-   verificación del repo una vez y diga cuánto tarda y si pasa: un `main` en rojo es un `P0`.
+3. **Auditoría, hecha por ti en esta sesión** (regla 3: sin subagente). Sobre esa copia, con la
+   lista de "Qué revisar" y "Cómo verificar cada hallazgo" de la skill `/audit` (léela en
+   `~/.claude/skills/audit/SKILL.md`) y la forma de trabajar de `~/.claude/agents/repo-auditor.md`
+   (leer antes de grepear, citar `fichero:línea`, distinguir "es" de "parece"). Saca la tabla de
+   criticidad. Corre además la verificación del repo una vez y apunta cuánto tarda y si pasa: un
+   `main` en rojo es un `P0`.
 4. **Sin duplicados.** `gh issue list -R <slug> --label audit --state all --limit 100`. Un
    hallazgo que ya tiene issue abierto no se repite (si hay evidencia nueva, se comenta en él);
    uno cerrado como "not planned" no se reabre.
@@ -97,19 +107,25 @@ termina.
    que se vean por el camino (esos, como mucho, un comentario en el issue). Después, el test de
    regresión en verde y la verificación completa en verde. Ruff en lo que se toque, si el repo es
    Python.
-7. **Segunda opinión.** Lanza el subagente `verifier` con el diff y el criterio de aceptación del
-   issue. Su veredicto va tal cual al cuerpo del PR; si refuta el arreglo, el PR se abre igual en
-   draft pero el título empieza por `[refutado]`, para que no se pase a listo sin mirarlo.
+7. **Intento de refutación, en esta sesión** (regla 3: sin subagente). Sigue el método de
+   `~/.claude/agents/verifier.md` contra tu propio diff y el criterio de aceptación del issue:
+   relee el diff entero buscando lo que rompe, comprueba el criterio por un camino distinto al del
+   test que escribiste y busca usos del código tocado que el test no cubre. No es una revisión
+   independiente, porque la hace quien escribió el arreglo, y el PR lo dice así; la independiente
+   es la de la persona al revisar el draft. Si encuentras un fallo que no sabes cerrar, el PR se
+   abre igual en draft pero el título empieza por `[refutado]`, para que no se pase a listo sin
+   mirarlo.
 8. **Commit y PR en draft.** Ficheros explícitos (nunca `git add -A`), conventional commit con
    scope en el idioma del repo, con su línea `Co-Authored-By`. `git push -u origin <rama>` (el
    hook `pre-push-verify` vuelve a verificar; si bloquea, se arregla, no se rodea) y
    `gh pr create --draft --title ... --body-file ...`. El cuerpo lleva: `Closes #<n>`, qué se
-   cambió y por qué, la salida del test fallando antes y pasando después, la verificación, el
-   veredicto del `verifier` y la línea de "Generated with Claude Code".
+   cambió y por qué, la salida del test fallando antes y pasando después, la verificación, lo que
+   salió del intento de refutación (marcado "no independiente") y la línea de "Generated with
+   Claude Code".
 9. **Recoge**: `git -C <ruta> worktree remove` del worktree (la rama sigue en el remoto con su
    PR). Nunca `gh pr ready`, nunca `gh pr merge`.
 10. **Resumen final**, corto: issue, enlace del PR draft, resultado del test antes y después,
-    verificación, veredicto del `verifier`.
+    verificación, resultado del intento de refutación.
 
 ## Si falla a medias
 
