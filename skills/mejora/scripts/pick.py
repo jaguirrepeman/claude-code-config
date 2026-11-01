@@ -70,7 +70,8 @@ def slug_from_url(url: str) -> str | None:
 def find_repos(root: Path, only: list[str]) -> list[Repo]:
     repos = []
     for d in sorted(root.iterdir()):
-        if not (d / ".git").exists():
+        # En un worktree `.git` es un fichero: sería el mismo repo dos veces en la rotación.
+        if not (d / ".git").is_dir():
             continue
         if only and d.name not in only:
             continue
