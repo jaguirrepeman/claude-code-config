@@ -112,3 +112,42 @@ def test_pick_mark_then_audit_rotates(tmp_path: Path) -> None:
     assert "REPO: alfa" in first and "sin-verify" not in first
     run("marcar", "alfa")
     assert "REPO: beta" in run("auditar")
+
+
+def test_pick_ignores_worktree_folders(tmp_path: Path) -> None:
+    # Un worktree hermano (idealista_bot-map) tiene `.git` como fichero y el mismo remoto: si
+    # cuenta como repo, el mismo repo entra dos veces en la rotación.
+    root = tmp_path / "repos"
+    main = root / "bot"
+    (main / ".claude").mkdir(parents=True)
+    (main / ".claude" / "verify-command").write_text("true\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(main)], check=True, timeout=30)
+    subprocess.run(
+        ["git", "-C", str(main), "remote", "add", "origin", "https://github.com/yo/bot.git"],
+        check=True,
+        timeout=30,
+    )
+    subprocess.run(["git", "-C", str(main), "add", "."], check=True, timeout=30)
+    subprocess.run(
+        ["git", "-C", str(main), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x"],
+        check=True,
+        timeout=30,
+    )
+    subprocess.run(
+        ["git", "-C", str(main), "worktree", "add", "-q", str(root / "bot-map")], check=True, timeout=30
+    )
+    r = subprocess.run(
+        [
+            PYTHON,
+            str(REPO / "skills" / "mejora" / "scripts" / "pick.py"),
+            "auditar",
+            "--root",
+            str(root),
+            "--state",
+            str(tmp_path / "s.json"),
+        ],
+        capture_output=True,
+        timeout=60,
+    )
+    out = r.stdout.decode("utf-8")
+    assert "ROTACIÓN: bot=nunca" in out and "bot-map" not in out, out
