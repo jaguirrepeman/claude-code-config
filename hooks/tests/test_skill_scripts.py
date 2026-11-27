@@ -69,6 +69,26 @@ def test_pick_fix_orders_by_severity_and_skips_issues_with_open_pr() -> None:
     assert skipped == []
 
 
+def test_pick_fix_takes_review_issues_as_draft_and_autonomous_as_ready() -> None:
+    # audit-revision también lo arregla el robot, pero su PR va en draft para que lo mire la
+    # persona; audit-autonomo sale listo y lo fusiona el gate. Un P1 de revisión va antes que un P3
+    # autónomo: manda la severidad, no el modo.
+    q = _load_pick()
+    issues = {"atril": [_issue(3, ["audit-autonomo", "P3"]), _issue(8, ["audit-revision", "P1"])]}
+    candidates, _ = q.pick_fix(issues, {"atril": []}, max_drafts=2)
+    assert [(c.number, c.pr_mode) for c in candidates] == [(8, "draft"), (3, "listo")]
+
+
+def test_merge_issue_lists_dedupes_issue_with_both_labels() -> None:
+    q = _load_pick()
+    a = [_issue(1, ["audit-autonomo"]), _issue(2, ["audit-autonomo", "audit-revision"])]
+    b = [_issue(2, ["audit-autonomo", "audit-revision"]), _issue(5, ["audit-revision"])]
+    assert [i["number"] for i in q.merge_issue_lists(a, b)] == [1, 2, 5]
+    # Con las dos etiquetas gana la prudente: draft.
+    candidates, _ = q.pick_fix({"r": q.merge_issue_lists(a, b)}, {"r": []}, max_drafts=2)
+    assert {c.number: c.pr_mode for c in candidates}[2] == "draft"
+
+
 def test_pick_fix_skips_repo_at_draft_limit() -> None:
     # El freno de PR abiertos: sin él, un sábado tras otro se apilan drafts que nadie revisa.
     q = _load_pick()
