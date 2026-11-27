@@ -7,8 +7,10 @@ pasen con `--repos`.
 
     pick.py auditar [--root R] [--repos a,b]   el repo con la auditoría más antigua (o ninguna)
     pick.py marcar <repo> [--state F]           apunta que <repo> se auditó hoy
-    pick.py arreglar [--root R] [--repos a,b]   el issue `audit-autonomo` más grave que se puede
-                                                 coger sin pasar de `--max-drafts` PR abiertos
+    pick.py arreglar [--root R] [--repos a,b]   el issue `audit-autonomo` o `audit-revision` más
+                                                 grave que se puede coger sin pasar de
+                                                 `--max-drafts` PR abiertos, y si su PR sale listo
+                                                 (autónomo) o en draft (revisión)
 
 El estado de la rotación vive en `~/.claude/state/mejora.json`. Si se pierde, la rotación empieza
 de nuevo; no es una decisión, solo un turno. Nunca sale con error: la skill que lo llama aborta
@@ -30,6 +32,7 @@ from pathlib import Path
 TIMEOUT_GIT = 20
 TIMEOUT_GH = 30
 LABEL_AUTONOMOUS = "audit-autonomo"
+LABEL_REVIEW = "audit-revision"
 BRANCH_PREFIX = "claude/audit-"
 SEVERITIES = ("P0", "P1", "P2", "P3")
 DEFAULT_STATE = Path.home() / ".claude" / "state" / "mejora.json"
@@ -52,6 +55,7 @@ class Candidate:
     title: str
     severity: str
     created: str
+    pr_mode: str = "listo"  # "listo" lo fusiona el gate; "draft" espera a la persona
 
 
 def run(cmd: list[str], cwd: Path | None = None, timeout: int = TIMEOUT_GIT) -> str | None:
@@ -105,6 +109,15 @@ def severity_of(labels: list[str]) -> str:
     return "P3"  # sin etiqueta de severidad cuenta como la menor, no se cuela delante
 
 
+def merge_issue_lists(*lists: list[dict]) -> list[dict]:
+    """Une las listas de cada etiqueta sin repetir el issue que lleva las dos."""
+    seen: dict[int, dict] = {}
+    for lst in lists:
+        for issue in lst:
+            seen.setdefault(issue["number"], issue)
+    return [seen[n] for n in sorted(seen)]
+
+
 def pick_fix(
     issues: dict[str, list[dict]], prs: dict[str, list[dict]], max_drafts: int
 ) -> tuple[list[Candidate], list[str]]:
@@ -122,8 +135,9 @@ def pick_fix(
             if any(h.startswith(f"{BRANCH_PREFIX}{n}-") for h in heads):
                 continue  # ya tiene su PR abierto
             labels = [lb["name"] for lb in issue.get("labels", [])]
+            mode = "draft" if LABEL_REVIEW in labels else "listo"
             candidates.append(
-                Candidate(repo, n, issue["title"], severity_of(labels), issue.get("createdAt", ""))
+                Candidate(repo, n, issue["title"], severity_of(labels), issue.get("createdAt", ""), mode)
             )
     candidates.sort(key=lambda c: (SEVERITIES.index(c.severity), c.created, c.repo, c.number))
     return candidates, skipped
@@ -158,27 +172,31 @@ def cmd_fix(repos: list[Repo], max_drafts: int) -> None:
     prs: dict[str, list[dict]] = {}
     unavailable = []
     for r in repos:
-        i = gh_json(
-            [
-                "issue",
-                "list",
-                "-R",
-                r.slug,
-                "--state",
-                "open",
-                "--label",
-                LABEL_AUTONOMOUS,
-                "--json",
-                "number,title,labels,createdAt",
-                "--limit",
-                "50",
-            ]
-        )
+        # `--label` repetido es Y, no O: una consulta por etiqueta.
+        by_label = [
+            gh_json(
+                [
+                    "issue",
+                    "list",
+                    "-R",
+                    r.slug,
+                    "--state",
+                    "open",
+                    "--label",
+                    label,
+                    "--json",
+                    "number,title,labels,createdAt",
+                    "--limit",
+                    "50",
+                ]
+            )
+            for label in (LABEL_AUTONOMOUS, LABEL_REVIEW)
+        ]
         p = gh_json(["pr", "list", "-R", r.slug, "--state", "open", "--json", "headRefName"])
-        if i is None or p is None:
+        if any(i is None for i in by_label) or p is None:
             unavailable.append(r.name)
             continue
-        issues[r.name], prs[r.name] = i, p
+        issues[r.name], prs[r.name] = merge_issue_lists(*by_label), p
     candidates, skipped = pick_fix(issues, prs, max_drafts)
     by_name = {r.name: r for r in repos}
     if candidates:
@@ -188,12 +206,15 @@ def cmd_fix(repos: list[Repo], max_drafts: int) -> None:
         print(f"GITHUB: {by_name[top.repo].slug}")
         print(f"ISSUE: #{top.number} [{top.severity}] {top.title}")
         print(f"RAMA: {BRANCH_PREFIX}{top.number}-<descripción-corta>")
+        print(f"PR: {top.pr_mode}")
     else:
-        print("NADA QUE ARREGLAR: no hay issues audit-autonomo abiertos que se puedan coger.")
+        print(
+            "NADA QUE ARREGLAR: no hay issues audit-autonomo ni audit-revision abiertos que se puedan coger."
+        )
     if len(candidates) > 1:
         print("SIGUIENTES:")
         for c in candidates[1:6]:
-            print(f"  {c.repo} #{c.number} [{c.severity}] {c.title}")
+            print(f"  {c.repo} #{c.number} [{c.severity}] ({c.pr_mode}) {c.title}")
     for s in skipped:
         print(f"SALTADO: {s}")
     for u in unavailable:

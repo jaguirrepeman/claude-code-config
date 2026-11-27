@@ -1,19 +1,22 @@
 ---
 name: mejora
-description: Mejora continua programada de los repos. `auditar` audita el repo al que le toca turno y convierte los hallazgos en issues; `arreglar` coge el issue autónomo más grave, lo arregla con su test de regresión y abre un PR en draft. Úsala solo cuando la pida explícitamente `/mejora` o una tarea programada que la nombre; "mejora este código" en una sesión normal no es esto.
+description: Mejora continua programada de los repos. `auditar` audita el repo al que le toca turno y convierte los hallazgos en issues; `arreglar` coge el issue `audit-autonomo` o `audit-revision` más grave, lo arregla con su test de regresión y abre un PR (listo si es autónomo, para que lo fusione el gate; en draft si necesita un vistazo). Úsala solo cuando la pida explícitamente `/mejora` o una tarea programada que la nombre; "mejora este código" en una sesión normal no es esto.
 user-invocable: true
 argument-hint: auditar|arreglar [--root carpeta] [--repos a,b] [--max-drafts N]
 allowed-tools: Bash(python ${CLAUDE_SKILL_DIR}/scripts/pick.py *)
 ---
 
-# /mejora: auditar a issues, arreglar a PR draft
+# /mejora: auditar a issues, arreglar a PR
 
 Corre sin nadie delante. Por eso hay tres reglas que no se negocian, y mandan sobre cualquier
 otra cosa de este fichero:
 
-1. **Nunca pasa de PR en draft.** En estos repos un PR que no es draft lo fusiona el gate y
-   despliega a producción. El robot no fusiona, no marca "ready for review", no toca `main` y
-   no despliega. Quien pasa el PR a listo es la persona, tras revisarlo.
+1. **El PR sale listo solo si el issue es `audit-autonomo`.** En estos repos un PR que no es
+   draft lo fusiona el gate (solo en verde) y despliega a producción, con su health check. Eso
+   es lo que se quiere para los arreglos claros: que lleguen solos, sin que la persona mire
+   (decidido el 2026-11-27). Todo lo demás (issue `audit-revision`, un diff que acaba tocando
+   una zona caliente, un intento de refutación que no queda limpio) va en draft. El robot nunca
+   ejecuta `gh pr merge`, nunca toca `main` y nunca despliega a mano: fusiona el gate.
 2. **Ante la duda, para y deja constancia.** Si algo no cuadra (verificación en rojo antes de
    tocar nada, issue ambiguo, el arreglo toca una zona caliente, falta una herramienta), no se
    improvisa: se comenta en el issue lo que se vio, con la salida real, y se termina el turno.
@@ -45,8 +48,14 @@ Todas en ASCII, para que `gh` no dependa de la codificación de la consola. Ante
 | Etiqueta | Para qué |
 |---|---|
 | `audit` | Todo issue que abre esta skill |
-| `audit-autonomo` | Se puede arreglar sin decidir nada de negocio: bug claro, lint, higiene, test que falta |
-| `audit-decision` | Necesita a la persona: trade-off de producto, infraestructura viva, borrado, zona caliente |
+| `audit-autonomo` | Lo arregla el robot y se fusiona solo: bug claro, lint, higiene, test que falta, fuera de zonas calientes |
+| `audit-revision` | Lo arregla el robot, pero el PR va en draft para un vistazo: arreglo en zona caliente, o una elección pequeña de producto en la que el robot aplica su opción recomendada |
+| `audit-decision` | Decisión gorda, el robot no la toca: borrar o migrar datos, infraestructura viva, despliegue o gate del CI, credenciales, dinero o cuota, dependencias mayores, un cambio de producto con consecuencias que no se deshacen |
+
+La persona quiere el máximo de autonomía: **ante la duda entre dos niveles, el menos
+restrictivo que no sea irreversible**. Una elección de producto pequeña y reversible (cómo
+repartir una sesión entre dos días, qué hacer con dos pantallas abiertas) es `audit-revision`
+con la opción recomendada escrita en el issue, no `audit-decision`.
 | `P0` a `P3` | Severidad, la misma escala que `/audit` |
 
 ## Modo `auditar`
@@ -78,8 +87,10 @@ Sin editar nada en el repo. El único efecto son issues en GitHub y la marca de 
    - Causa raíz y arreglo propuesto.
    - **Criterio de aceptación**: qué test de regresión lo demuestra (falla hoy, pasa tras el
      arreglo).
-   - Por qué es `autonomo` o `decision`. Zona caliente, cambio de dependencias mayores,
-     migraciones de datos, despliegue y borrados siempre son `decision`.
+   - Por qué es `autonomo`, `revision` o `decision`, según la tabla de etiquetas. Un fichero de
+     zona caliente es como mínimo `revision`. Migraciones de datos, borrados, despliegue, gate
+     del CI, credenciales y dependencias mayores siempre son `decision`. Si es `revision` por una
+     elección de producto, el issue dice qué opción aplicará el robot y por qué.
 6. **Marca la rotación**: `python "${CLAUDE_SKILL_DIR}/scripts/pick.py" marcar <repo>`.
 7. **Resumen final**, corto: repo auditado, issues creados con su enlace y etiqueta, hallazgos
    sin verificar, y la verificación de `main` (pasa o no, y tiempo).
@@ -95,9 +106,12 @@ termina.
    `git -C <ruta> fetch --prune` y `git -C <ruta> worktree add -b claude/audit-<n>-<slug-corto>
    <ruta>/.claude/worktrees/audit-<n> origin/<rama-por-defecto>`. Todo lo que sigue se hace
    dentro de ese worktree.
-3. **Lee el `CLAUDE.md` del repo** y sus reglas. Si el arreglo tiene que tocar un fichero de una
-   zona caliente, para: comenta en el issue qué fichero y por qué, cambia la etiqueta a
-   `audit-decision` y termina.
+3. **Lee el `CLAUDE.md` del repo** y sus reglas, incluidas las de zona caliente (siguen
+   valiendo: test con fixtures, un solo parser, lo que digan). El modo del PR sale de `pick.py`
+   (`PR: listo` o `PR: draft`). Si un issue `audit-autonomo` acaba tocando un fichero de zona
+   caliente, se sigue, pero el PR pasa a draft y el cuerpo dice qué fichero y por qué. Si el
+   arreglo exige algo de la fila `audit-decision` (migrar datos, tocar el gate o el despliegue,
+   borrar), para: comenta en el issue, cambia la etiqueta a `audit-decision` y termina.
 4. **Verificación antes de tocar nada**: el comando de `.claude/verify-command`. Si ya está en
    rojo, el issue no se puede comprobar: comenta la salida en el issue y termina.
 5. **Test de regresión primero.** Escribe el test del criterio de aceptación y córrelo: tiene que
@@ -112,19 +126,20 @@ termina.
    relee el diff entero buscando lo que rompe, comprueba el criterio por un camino distinto al del
    test que escribiste y busca usos del código tocado que el test no cubre. No es una revisión
    independiente, porque la hace quien escribió el arreglo, y el PR lo dice así; la independiente
-   es la de la persona al revisar el draft. Si encuentras un fallo que no sabes cerrar, el PR se
-   abre igual en draft pero el título empieza por `[refutado]`, para que no se pase a listo sin
-   mirarlo.
-8. **Commit y PR en draft.** Ficheros explícitos (nunca `git add -A`), conventional commit con
+   es el gate del CI y, en draft, la persona. Si encuentras un fallo que no sabes cerrar, el PR
+   se abre en draft (aunque tocara listo) y el título empieza por `[refutado]`.
+8. **Commit y PR.** Ficheros explícitos (nunca `git add -A`), conventional commit con
    scope en el idioma del repo, con su línea `Co-Authored-By`. `git push -u origin <rama>` (el
    hook `pre-push-verify` vuelve a verificar; si bloquea, se arregla, no se rodea) y
-   `gh pr create --draft --title ... --body-file ...`. El cuerpo lleva: `Closes #<n>`, qué se
+   `gh pr create --title ... --body-file ...`, con `--draft` salvo que el modo sea `listo` y el
+   paso 3 y el 7 no lo hayan bajado a draft. El cuerpo lleva: `Closes #<n>`, qué se
    cambió y por qué, la salida del test fallando antes y pasando después, la verificación, lo que
    salió del intento de refutación (marcado "no independiente") y la línea de "Generated with
    Claude Code".
 9. **Recoge**: `git -C <ruta> worktree remove` del worktree (la rama sigue en el remoto con su
-   PR). Nunca `gh pr ready`, nunca `gh pr merge`.
-10. **Resumen final**, corto: issue, enlace del PR draft, resultado del test antes y después,
+   PR). Nunca `gh pr ready` sobre un draft, nunca `gh pr merge`: fusiona el gate.
+10. **Resumen final**, corto: issue, enlace del PR y si salió listo o en draft (y por qué),
+    resultado del test antes y después,
     verificación, resultado del intento de refutación.
 
 ## Si falla a medias
