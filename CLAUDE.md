@@ -4,12 +4,27 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
 `~/.claude/machine.md`, que se importa al final. Las reglas de un repo concreto van en el
 `CLAUDE.md` de ese repo y mandan sobre estas.
 
+## Autonomía
+
+- **Todo se da por aprobado salvo dos cosas**: cambiar una base de datos (esquema, migraciones,
+  borrar o reescribir datos, en local o en producción) y los cambios de comportamiento agresivos
+  o radicales (lo que cambia de golpe cómo funciona algo que la persona ya usa, quita una
+  función, o no se deshace con un `git revert`). Solo esas dos esperan su sí. Lo demás se hace
+  sin preguntar: planes, cambios en varios ficheros, commits, push, PR, reintentos, pruebas.
+- **De corrido hasta terminar lo pedido.** No se cierra un turno con una pregunta cuyo siguiente
+  paso es reversible y está dentro de lo pedido: se hace y se cuenta después. Las esperas largas
+  (CI, la nube) no cortan el turno: se espera en segundo plano y se sigue con otra parte.
+- **Ante la duda entre dos caminos razonables, se elige uno y se dice cuál y por qué**, en vez de
+  preguntar. Se pregunta solo si el error costaría datos o rompería algo en uso.
+- Lo que obligan las herramientas (permisos que rebajen la seguridad, credenciales, pagos) sigue
+  pidiendo a la persona: eso no lo cambia esta regla.
+
 ## Antes de escribir código
 
-- **Explorar, planificar, ejecutar, verificar.** Para un cambio no trivial: leer lo que hay y
-  explicarlo antes de tocar nada, plan corto y aprobado, ejecución con criterio de aceptación,
-  verificación en verde. Si la tarea cabe en una frase y toca pocos ficheros conocidos, se salta
-  la exploración y el plan.
+- **Explorar, planificar, ejecutar, verificar.** Para un cambio no trivial: leer lo que hay,
+  plan corto que se enseña y se ejecuta sin esperar, criterio de aceptación, verificación en
+  verde. Si la tarea cabe en una frase y toca pocos ficheros conocidos, se salta la exploración
+  y el plan.
 - **Herramienta existente antes que reimplementar.** Buscar en el repo (CLI, `scripts/`, skills,
   paquetes ya instalados) antes de escribir nada nuevo. Si existe un camino en el repo, se usa
   ese, aunque esté en otro lenguaje.
@@ -39,10 +54,10 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
 
 - Cambio mínimo y aditivo. Añadir una entrada a un fichero de configuración, no regenerarlo
   entero. Nada de refactors oportunistas dentro de un arreglo.
-- Antes de refactors grandes o cambios multi-fichero, exponer plan y alcance, y esperar
-  confirmación.
-- **Salida generada en serie (índices, fichas, layouts, tablas), primero una muestra.** Enseñar
-  la estructura con dos o tres elementos y esperar el visto bueno antes de generar el resto.
+- Un refactor grande que cambie cómo se comporta algo en uso cuenta como cambio radical
+  (ver Autonomía) y espera confirmación; uno que no cambia el comportamiento, no.
+- **Salida generada en serie (índices, fichas, layouts, tablas), primero una muestra.** Generar
+  dos o tres elementos, revisarlos contra lo pedido y seguir con el resto sin esperar.
   Por defecto, la salida más pequeña que sirva (un índice por capítulos, no por apartados).
 - A la segunda corrección fallida sobre lo mismo, parar: limpiar contexto y reescribir el encargo
   con lo aprendido, no seguir corrigiendo encima.
@@ -69,9 +84,9 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
 
 ## Git
 
-- **Claude commitea cuando se le pide; no decide por su cuenta que algo merece commit.** Si el
-  `push` y abrir el PR piden confirmación lo decide `machine.md`: donde el gate del CI fusiona
-  solo en verde, salen sin preguntar; donde no, se pregunta. Lo mismo para fusionar a mano
+- **Terminada y verificada la tarea pedida, Claude commitea sin preguntar.** Si el `push` y
+  abrir el PR piden confirmación lo decide `machine.md`: donde el gate del CI fusiona solo en
+  verde, salen sin preguntar; donde no, se pregunta. Lo mismo para fusionar a mano
   (`gh pr merge`). Borrar una rama ya fusionada también lo decide `machine.md`; borrar una rama
   sin fusionar pide confirmación siempre, en cada ocasión.
 - **Las ramas las abre Claude, no la persona**, antes de tocar el primer fichero. Una tarea, una

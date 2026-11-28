@@ -25,8 +25,8 @@ python "${CLAUDE_SKILL_DIR}/scripts/status.py" $ARGUMENTS || true
 2. **Los issues abiertos son la lista de pendientes fiable.** Las "líneas de pendientes en
    sesiones" son una heurística sobre el último mensaje de cada hilo reciente: puede haber ruido
    ("pendiente de ti", "queda por probar en el iPad"). Léelas, quédate con las que son tareas de
-   verdad y que no tienen issue, y propón convertirlas en issues (`gh issue create` en el repo que
-   toque, con el contexto). No las crees sin que el usuario lo confirme.
+   verdad y que no tienen issue, y conviértelas en issues sin esperar (`gh issue create` en el
+   repo que toque, con el contexto), pegando las URL.
 3. **Propón, no ejecutes.** Las acciones (podar ramas con `/repo-hygiene`, relanzar un PR
    parado, cerrar un draft viejo, bajar los commits de `origin`) se listan por repo; cada una se
    hace en su repo, en su sesión, no desde aquí.

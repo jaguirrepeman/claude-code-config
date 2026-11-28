@@ -60,8 +60,9 @@ Una tabla criticidad × alcance, en español, con estas columnas:
   infraestructura activa (p. ej. mover el despliegue de un proveedor a otro),
   o borrar algo no confirmado como fusionado/huérfano.
 
-Termina con una recomendación clara de por dónde empezar, y **para ahí**:
-espera confirmación antes de pasar a implementar. Si el usuario aprueba,
-sigue el flujo de ramas/worktrees/CI descrito en `~/.claude/CLAUDE.md` y en el
+Termina con una recomendación clara de por dónde empezar y pasa a implementar
+sin esperar, salvo los fixes que cambian una base de datos o el comportamiento
+de forma agresiva o radical (ver "Autonomía" en `~/.claude/CLAUDE.md`): esos se
+listan y esperan el sí. Para el resto, sigue el flujo de ramas/worktrees/CI descrito en `~/.claude/CLAUDE.md` y en el
 `CLAUDE.md` del propio repo (si existe) para aplicar los fixes autónomos, uno
 por rama/PR, con su test de regresión.

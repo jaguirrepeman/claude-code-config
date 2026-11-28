@@ -438,11 +438,12 @@ son cosa suya: verificar no es entregar.
 
 ### 6.1 Commits y qué se revisa
 
-- **Claude commitea cuando se lo pides; no decide por su cuenta que algo merece un commit.** Si
-  dices "arregla el texto de esa columna y commitea", lo hace sin volver a preguntar, porque un
-  commit es local y se deshace con un `git revert` (2.3). Si terminas una tarea y no dices nada,
-  espera a que se lo pidas. Y `push` y fusionar nunca pasan sin confirmación explícita en cada
-  ocasión, porque ahí el cambio deja de ser solo tuyo.
+- **Claude commitea sin preguntar cuando termina y verifica la tarea pedida**, porque un commit
+  se deshace con un `git revert` (2.3). Si `push` y el PR piden confirmación lo decide
+  `machine.md`: en los repos personales, con un gate del CI que solo fusiona en verde, salen sin
+  preguntar (decidido el 2026-09-19). Desde el 2026-11-28 todo se da por aprobado salvo cambiar
+  una base de datos y los cambios de comportamiento agresivos o radicales (`CLAUDE.md`,
+  "Autonomía").
 - **Qué se revisa antes de un commit.** La práctica establecida para revisar código generado
   por IA se apoya en tres cosas, y ninguna de ellas es leérselo entero:
 
