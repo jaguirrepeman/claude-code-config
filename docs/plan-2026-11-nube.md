@@ -33,15 +33,20 @@ un repo desechable en `/tmp`:
 - Arranca sin `~/.claude/settings.json`: un commit en `main` entró (`salida=0`) y `git add -A`
   también. `install.sh` copia los hooks pero no los registra, y ningún repo trae hooks en su
   `.claude/settings.json`.
-- Fusionar el bloque de hooks a mitad de sesión los activa: el siguiente commit en `main` salió
-  bloqueado con el mensaje de `block-commit-on-protected.py`.
+- Fusionar el bloque de hooks a mitad de sesión los activa **a veces**. En cinco pruebas (16:25 a
+  16:49 UTC) el commit en `main` salió bloqueado por `block-commit-on-protected.py` en dos: a los
+  13 s de fusionar, y a los 21 y 45 s tras un primer commit que sí entró. Entró en las otras tres:
+  a los 5 s, a 1 s tras una espera de 25 s dentro del mismo comando, y tras 15 s de espera en un
+  comando aparte. No hay un tiempo de espera que lo garantice.
 - La lista `deny` fusionada igual no se aplica en caliente: `git add -A` siguió pasando.
 - `python` existe (`/usr/local/bin/python`), así que `onFailure: "block"` no cierra git.
-- La recarga no es inmediata: en una segunda prueba (16:41 UTC) un commit en `main` un segundo
-  después de fusionar entró, y los de 21 y 45 segundos después salieron bloqueados. Por eso
-  `merge_guards.py` espera 25 segundos tras escribir antes de devolver el control.
 
-Por eso las dos tareas corren `python3 settings/merge_guards.py` justo después de `install.sh`.
+Las dos tareas corren `python3 settings/merge_guards.py` justo después de `install.sh`, pero eso
+no basta. La documentación (code.claude.com/docs/en/settings, "Settings in cloud sessions",
+leída el 2026-11-28) dice que en la nube `~/.claude/settings.json` no se lee, y que con varios
+repos del `.claude/settings.json` de cada uno solo cuentan `enabledPlugins` y
+`extraKnownMarketplaces`. Un script de preparación del entorno tampoco valdría. La vía pendiente
+es un plugin con las guardas, activado en la configuración de la tarea (#49).
 Solo `PreToolUse`: los hooks de `PostToolUse` y `Stop` no protegen git y cambiarían una tarea
 desatendida. `git add -A` en la nube sigue sin bloqueo (la regla vive en el texto de la tarea).
 

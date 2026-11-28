@@ -70,9 +70,10 @@ juntar los dos bloques en un fichero nuevo. Si `~/.claude/settings.json` ya tien
 
 En la nube (las tareas de `/mejora`) no hay nadie para fusionarlo: justo después de `install.sh`
 corren `python3 settings/merge_guards.py`, que escribe las tres guardas de `PreToolUse` y la
-lista `deny` en un `settings.json` sin hooks y no toca uno que ya los tenga. Los hooks se cargan
-en caliente, con hasta unos 20 segundos de retraso, así que el script espera 25 antes de volver; la lista `deny` no, así que en la nube `git add -A` no queda bloqueado (probado el
-2026-11-28, ver `docs/plan-2026-11-nube.md`).
+lista `deny` en un `settings.json` sin hooks y no toca uno que ya los tenga. **No es fiable**: la
+recarga en caliente activó las guardas en dos de cinco pruebas y la lista `deny` en ninguna (ver
+`docs/plan-2026-11-nube.md`). La documentación dice que en la nube `~/.claude/settings.json` no se
+lee; la vía pendiente es empaquetar las guardas como plugin (#49).
 
 Requisitos de los hooks: `python` en el PATH (3.10 o superior). Los comandos usan `$HOME`, que
 Claude Code expande en el shell con el que lanza los hooks; si en la primera sesión no aparece el
