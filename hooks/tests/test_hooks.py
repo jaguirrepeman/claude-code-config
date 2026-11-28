@@ -633,3 +633,34 @@ def test_push_hook_timeout_does_not_wait_for_grandchildren(repo: Path) -> None:
     code, out = run_hook("pre-push-verify.py", bash("git push", repo), repo, env)
     assert (code, out) == (0, "")
     assert time.monotonic() - inicio < 15
+
+
+def run_merge_guards(config_dir: Path) -> str:
+    r = subprocess.run(
+        [PYTHON, str(HOOKS.parent / "settings" / "merge_guards.py")],
+        capture_output=True,
+        env={**os.environ, "CLAUDE_CONFIG_DIR": str(config_dir)},
+        timeout=60,
+    )
+    assert r.returncode == 0, r.stderr.decode("utf-8", errors="replace")
+    return r.stdout.decode("utf-8")
+
+
+def test_merge_guards_writes_only_pretooluse_and_deny_on_a_bare_cloud(tmp_path: Path) -> None:
+    # En la nube no hay settings.json y la sesión arrancaba sin guardas (28-11-2026).
+    out = run_merge_guards(tmp_path)
+    settings = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
+    assert list(settings["hooks"]) == ["PreToolUse"]
+    commands = [h["command"] for g in settings["hooks"]["PreToolUse"] for h in g["hooks"]]
+    assert all(any(guard in c for c in commands) for guard in GUARDS)
+    assert "Bash(git add -A *)" in settings["permissions"]["deny"]
+    assert "3 guardas" in out
+
+
+def test_merge_guards_never_touches_a_settings_file_with_hooks(tmp_path: Path) -> None:
+    # En el PC los hooks se fusionan a mano; el script no debe pisar nada de lo que haya.
+    existing = '{"hooks": {"Stop": []}, "permissions": {"allow": ["Bash(ls *)"]}}'
+    (tmp_path / "settings.json").write_text(existing, encoding="utf-8")
+    out = run_merge_guards(tmp_path)
+    assert (tmp_path / "settings.json").read_text(encoding="utf-8") == existing
+    assert "sin cambios" in out

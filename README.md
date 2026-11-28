@@ -37,6 +37,7 @@ al final `~/.claude/machine.md`, y ese fichero es el `machines/*.md` que toque.
 | `hooks/guard-branch-delete.py` | `~/.claude/hooks/` | `PreToolUse`: `git branch -D` está en `allow`; este hook pide confirmación solo si la rama no está fusionada en la base (ni antecesora, ni con su contenido ya dentro tras un squash, ni con un PR fusionado en GitHub con esa cabeza). Falla cerrado: si no puede comprobarlo, pregunta |
 | `hooks/tests/` | (solo este repo) | Tests de los siete hooks: `pytest -q hooks/tests`. Cada hook se ejecuta como proceso aparte con JSON por stdin, igual que lo lanza Claude Code |
 | `settings/hooks.snippet.json` | fusionar en `~/.claude/settings.json` | El bloque `"hooks"` que registra los seis scripts |
+| `settings/merge_guards.py` | (lo corren las tareas en la nube) | Fusiona las guardas de git y la lista `deny` en un `settings.json` sin hooks. Ver "Instalación" |
 | `settings/permissions.snippet.json` | fusionar en `~/.claude/settings.json` | Lista curada de permisos: `allow` para la lectura y el flujo diario de git y gh, `ask` para lo que tira trabajo no guardado, `deny` para lo que se salta el gate y los secretos |
 | `templates/project/` | copiar a la raíz de cada repo | Plantilla de `.claude/` para un repo: `settings.json`, regla por ruta de zonas calientes, `verify-command` y el trozo de `.gitignore`. Ver su README |
 | `templates/project/.claude/skills/pr-gate/` | `.claude/skills/pr-gate/` del repo | Skill que revisa cada PR antes del auto-merge con lo que un test genérico no ve en ese repo (zona caliente con su test, la app arranca, contratos). La ejecuta el job `review` del CI y su veredicto `block` para el merge. Se adapta la sección "Qué comprobar" |
@@ -66,6 +67,12 @@ El instalador **no toca `~/.claude/settings.json`**: fusiona a mano (no sobrescr
 `settings/hooks.snippet.json` y `settings/permissions.snippet.json` dentro de él. Si no existe, puedes
 juntar los dos bloques en un fichero nuevo. Si `~/.claude/settings.json` ya tiene `hooks` o
 `permissions`, añade las entradas dentro de las listas existentes.
+
+En la nube (las tareas de `/mejora`) no hay nadie para fusionarlo: justo después de `install.sh`
+corren `python3 settings/merge_guards.py`, que escribe las tres guardas de `PreToolUse` y la
+lista `deny` en un `settings.json` sin hooks y no toca uno que ya los tenga. Los hooks se cargan
+en caliente; la lista `deny` no, así que en la nube `git add -A` no queda bloqueado (probado el
+2026-11-28, ver `docs/plan-2026-11-nube.md`).
 
 Requisitos de los hooks: `python` en el PATH (3.10 o superior). Los comandos usan `$HOME`, que
 Claude Code expande en el shell con el que lanza los hooks; si en la primera sesión no aparece el
