@@ -33,6 +33,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +79,50 @@ def timeout_seconds() -> int:
         return DEFAULT_TIMEOUT
 
 
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Mata el shell y todo lo que lanzó: el pytest de verdad es su hijo, no él."""
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                capture_output=True,
+                timeout=TIMEOUT_GIT * 6,
+            )
+        else:
+            os.killpg(proc.pid, 9)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=TIMEOUT_GIT)
+
+
+def run_verification(cmd: str, root: Path, timeout: int) -> tuple[int, str] | None:
+    """Exit y salida de la verificación, o None si no terminó en `timeout` segundos.
+
+    La salida va a un fichero y no a una tubería: con `capture_output`, al vencer el tiempo
+    `subprocess.run` mataba solo el shell y se quedaba esperando a que el pytest nieto cerrase
+    la tubería (20 minutos en portfolio_tracker). Claude Code cortaba el hook a los 600 s y,
+    con `onFailure: block`, ningún push salía (28-11-2026). Al vencer se mata el árbol entero.
+    """
+    aparte = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if os.name == "nt"
+        else {"start_new_session": True}
+    )
+    try:
+        with tempfile.TemporaryFile() as out:
+            proc = subprocess.Popen(
+                cmd, shell=True, stdout=out, stderr=subprocess.STDOUT, cwd=str(root), **aparte
+            )
+            try:
+                returncode = proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                _kill_tree(proc)
+                return None
+            out.seek(0)
+            return returncode, out.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+
+
 def tail(text: str) -> str:
     return text if len(text) <= MAX_OUTPUT else "[...]\n" + text[-MAX_OUTPUT:]
 
@@ -118,29 +163,17 @@ def main() -> None:
     if cmd is None:
         return
 
-    try:
-        r = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout_seconds(),
-            cwd=str(root),
-        )
-    except subprocess.TimeoutExpired:
+    result = run_verification(cmd, root, timeout_seconds())
+    if result is None:
         # Sin veredicto no hay prueba de fallo: se deja pasar, y el CI sigue siendo el gate.
         return
-    except OSError:
+    returncode, text = result
+    if returncode == 0:
         return
 
-    if r.returncode == 0:
-        return
-
-    output = tail(((r.stdout or "") + (r.stderr or "")).strip())
+    output = tail(text.strip())
     deny(
-        f"Push bloqueado: la verificación del repo ({cmd}) terminó con exit {r.returncode}. "
+        f"Push bloqueado: la verificación del repo ({cmd}) terminó con exit {returncode}. "
         "Arregla lo que falla y repite el push; no desactives el hook ni saltes tests.\n\n"
         f"{output}"
     )
