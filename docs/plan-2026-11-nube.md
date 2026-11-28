@@ -27,6 +27,21 @@ Comprobado en la primera ejecución de prueba en la nube (2026-11-28, 12:04 UTC,
 - Las variables de Actions **no** se leen desde la nube: el latido salió "desconocido" cuando
   existía, y la nube cogió atril, que era del PC. Por eso el estado pasó a un issue.
 
+Comprobado con una tarea de prueba en la nube (2026-11-28, 16:25 UTC, Claude Code 2.1.332), en
+un repo desechable en `/tmp`:
+
+- Arranca sin `~/.claude/settings.json`: un commit en `main` entró (`salida=0`) y `git add -A`
+  también. `install.sh` copia los hooks pero no los registra, y ningún repo trae hooks en su
+  `.claude/settings.json`.
+- Fusionar el bloque de hooks a mitad de sesión los activa: el siguiente commit en `main` salió
+  bloqueado con el mensaje de `block-commit-on-protected.py`.
+- La lista `deny` fusionada igual no se aplica en caliente: `git add -A` siguió pasando.
+- `python` existe (`/usr/local/bin/python`), así que `onFailure: "block"` no cierra git.
+
+Por eso las dos tareas corren `python3 settings/merge_guards.py` justo después de `install.sh`.
+Solo `PreToolUse`: los hooks de `PostToolUse` y `Stop` no protegen git y cambiarían una tarea
+desatendida. `git add -A` en la nube sigue sin bloqueo (la regla vive en el texto de la tarea).
+
 ## Diseño
 
 - **Estado en GitHub, no en un fichero del PC.** En el cuerpo de un issue abierto con la
