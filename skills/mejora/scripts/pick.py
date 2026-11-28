@@ -16,11 +16,13 @@ pasen con `--repos`.
 repos que van solo en la nube; el resto va en el PC, y la nube los coge solo si el PC no ha pasado
 en las últimas `LATIDO_HORAS` horas. En el PC, cada llamada apunta ese latido.
 
-El estado (rotación y latido) vive en dos variables de Actions del repo `claude-code-config` del
-mismo dueño, para que el PC y la nube vean lo mismo; si no se pueden leer, en
-`~/.claude/state/mejora.json`. Si se pierde, la rotación empieza de nuevo; no es una decisión,
-solo un turno. Todo GitHub va por `gh api` (REST): en la nube el proxy rechaza `gh issue` y
-`gh pr`. Nunca sale con error: la skill que lo llama aborta entera si un comando `!` falla.
+El estado (rotación y latido) vive en el cuerpo de un issue abierto con la etiqueta
+`mejora-estado` en el repo `claude-code-config` del mismo dueño, para que el PC y la nube vean lo
+mismo. No en variables de Actions: la nube no las puede leer (probado el 2026-11-28). Si el issue
+no se puede leer, se usa `~/.claude/state/mejora.json`. Si se pierde, la rotación empieza de
+nuevo; no es una decisión, solo un turno. Todo GitHub va por `gh api` (REST): en la nube el
+proxy rechaza `gh issue` y `gh pr`. Nunca sale con error: la skill que lo llama aborta entera si
+un comando `!` falla.
 """
 
 from __future__ import annotations
@@ -44,8 +46,8 @@ SEVERITIES = ("P0", "P1", "P2", "P3")
 DEFAULT_STATE = Path.home() / ".claude" / "state" / "mejora.json"
 POLICY_FILE = Path(__file__).resolve().parent.parent / "repos.json"
 STATE_REPO_NAME = "claude-code-config"
-VAR_AUDITED = "MEJORA_AUDITADO"
-VAR_HEARTBEAT = "MEJORA_LATIDO_PC"
+STATE_LABEL = "mejora-estado"
+STATE_TITLE = "mejora: estado de la rotación y latido del PC (lo escribe el robot)"
 LATIDO_HORAS = 3
 
 
@@ -144,18 +146,54 @@ def parse_rest_issues(raw: list[dict]) -> list[dict]:
     ]
 
 
-def read_var(state_repo: str, name: str) -> str | None:
-    return run(
-        ["gh", "api", f"repos/{state_repo}/actions/variables/{name}", "--jq", ".value"], timeout=TIMEOUT_GH
+def render_state_body(state: dict) -> str:
+    return (
+        "Lo escribe `/mejora` (`skills/mejora/scripts/pick.py`). No lo edites a mano: es la rotación"
+        " de auditorías y el último paso del PC, que leen a la vez el PC y la tarea en la nube.\n\n"
+        "```json\n" + json.dumps(state, indent=2, sort_keys=True, ensure_ascii=False) + "\n```\n"
     )
 
 
-def write_var(state_repo: str, name: str, value: str) -> bool:
-    base = ["gh", "api", "--silent", "-f", f"name={name}", "-f", f"value={value}"]
-    patch = [*base, "-X", "PATCH", f"repos/{state_repo}/actions/variables/{name}"]
-    if run(patch, timeout=TIMEOUT_GH) is not None:
-        return True
-    return run([*base, "-X", "POST", f"repos/{state_repo}/actions/variables"], timeout=TIMEOUT_GH) is not None
+def parse_state_body(body: str) -> dict:
+    m = re.search(r"```json\s*\n(.*?)\n```", body or "", re.S)
+    if not m:
+        return {}
+    try:
+        data = json.loads(m.group(1))
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def read_shared(state_repo: str) -> tuple[int | None, dict | None]:
+    """El issue de estado y su contenido. (None, {}) si no existe; (None, None) si no se pudo leer."""
+    raw = gh_json(["api", f"repos/{state_repo}/issues?labels={STATE_LABEL}&state=open&per_page=5"])
+    if raw is None:
+        return None, None
+    issues = [i for i in raw if "pull_request" not in i]
+    if not issues:
+        return None, {}
+    first = min(issues, key=lambda i: i["number"])
+    return first["number"], parse_state_body(first.get("body") or "")
+
+
+def write_shared(state_repo: str, number: int | None, state: dict) -> bool:
+    body = render_state_body(state)
+    if number is None:
+        cmd = ["gh", "api", "--silent", f"repos/{state_repo}/issues", "-f", f"title={STATE_TITLE}"]
+        cmd += ["-f", f"body={body}", "-f", f"labels[]={STATE_LABEL}"]
+    else:
+        cmd = [
+            "gh",
+            "api",
+            "--silent",
+            "-X",
+            "PATCH",
+            f"repos/{state_repo}/issues/{number}",
+            "-f",
+            f"body={body}",
+        ]
+    return run(cmd, timeout=TIMEOUT_GH) is not None
 
 
 def pick_audit(names: list[str], audited: dict[str, str]) -> str | None:
@@ -297,12 +335,11 @@ def main() -> int:
         state_repo = f"{repos[0].slug.split('/')[0]}/{STATE_REPO_NAME}"
 
     # Lo de GitHub manda sobre el fichero local: es lo que ven a la vez el PC y la nube.
+    number, shared = read_shared(state_repo) if state_repo else (None, None)
+    readable = shared is not None
+    shared = dict(shared or {})
     audited = dict(state.get("audited", {}))
-    remote = read_var(state_repo, VAR_AUDITED) if state_repo else None
-    try:
-        audited.update(json.loads(remote) if remote else {})
-    except ValueError:
-        pass
+    audited.update(shared.get("audited", {}))
 
     if args.mode == "marcar":
         if not args.repo:
@@ -312,19 +349,19 @@ def main() -> int:
         state["audited"] = audited
         state_path.parent.mkdir(parents=True, exist_ok=True)
         state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        shared = bool(state_repo) and write_var(state_repo, VAR_AUDITED, json.dumps(audited, sort_keys=True))
-        print(
-            f"Apuntado: {args.repo} auditado el {audited[args.repo]}" + ("" if shared else " (solo en local)")
-        )
+        shared["audited"] = audited
+        ok = bool(state_repo) and readable and write_shared(state_repo, number, shared)
+        print(f"Apuntado: {args.repo} auditado el {audited[args.repo]}" + ("" if ok else " (solo en local)"))
         return 0
 
     if not root.is_dir():
         print(f"No existe la carpeta de repos: {root}")
         return 0
     now = dt.datetime.now(dt.timezone.utc)
-    heartbeat = read_var(state_repo, VAR_HEARTBEAT) if state_repo else None
-    if args.donde == "pc" and state_repo:
-        write_var(state_repo, VAR_HEARTBEAT, now.isoformat(timespec="seconds"))
+    heartbeat = shared.get("latido_pc")
+    if args.donde == "pc" and state_repo and readable:
+        # Sin leer antes no se escribe: un PATCH a ciegas borraría la rotación de la nube.
+        write_shared(state_repo, number, {**shared, "latido_pc": now.isoformat(timespec="seconds")})
     names = repos_for_place([r.name for r in repos], load_policy(), args.donde, heartbeat, now)
     print(f"DÓNDE: {args.donde} (último paso del PC: {heartbeat or 'desconocido'})")
     repos = [r for r in repos if r.name in names]
