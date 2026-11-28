@@ -2,7 +2,7 @@
 name: mejora
 description: Mejora continua programada de los repos. `auditar` audita el repo al que le toca turno y convierte los hallazgos en issues; `arreglar` coge el issue `audit-autonomo` o `audit-revision` más grave, lo arregla con su test de regresión y abre un PR (listo si es autónomo, para que lo fusione el gate; en draft si necesita un vistazo). Úsala solo cuando la pida explícitamente `/mejora` o una tarea programada que la nombre; "mejora este código" en una sesión normal no es esto.
 user-invocable: true
-argument-hint: auditar|arreglar [--root carpeta] [--repos a,b] [--max-drafts N]
+argument-hint: auditar|arreglar [--root carpeta] [--donde pc|nube] [--repos a,b] [--max-drafts N]
 allowed-tools: Bash(python ${CLAUDE_SKILL_DIR}/scripts/pick.py *)
 ---
 
@@ -37,13 +37,29 @@ Modo pedido: `$ARGUMENTS` (la primera palabra es `auditar` o `arreglar`).
 python "${CLAUDE_SKILL_DIR}/scripts/pick.py" $ARGUMENTS || true
 ```
 
-Usa el repo, la ruta y el issue de arriba. No elijas otro por tu cuenta.
+Usa el repo, la ruta y el issue de arriba. No elijas otro por tu cuenta. Si dice `DÓNDE: nube`
+y no da repo ni issue, es que este PC ya ha pasado hace poco o no hay nada: se dice y se termina.
+
+## GitHub, siempre por REST
+
+En la nube el proxy rechaza `gh issue` y `gh pr` (van por GraphQL); `gh api` sí pasa. Para que
+haya un solo camino, se usa `gh api` también en el PC. Los cuerpos van en un fichero UTF-8 y se
+pasan con `-F body=@fichero.md`.
+
+| Para | Comando |
+|---|---|
+| Leer un issue y sus comentarios | `gh api repos/<slug>/issues/<n>` y `gh api repos/<slug>/issues/<n>/comments` |
+| Listar issues `audit` | `gh api "repos/<slug>/issues?labels=audit&state=all&per_page=100"` (quita los que tengan `pull_request`) |
+| Crear un issue | `gh api repos/<slug>/issues -f title=... -F body=@f.md -f "labels[]=audit" -f "labels[]=P2"` |
+| Comentar | `gh api repos/<slug>/issues/<n>/comments -F body=@f.md` |
+| Cambiar etiquetas | `gh api -X POST repos/<slug>/issues/<n>/labels -f "labels[]=..."` y `gh api -X DELETE repos/<slug>/issues/<n>/labels/<etiqueta>` |
+| Crear una etiqueta | `gh api repos/<slug>/labels -f name=... -f color=... -f description=...` (un 422 es que ya existe) |
+| Abrir el PR | `gh api repos/<slug>/pulls -f title=... -F body=@f.md -f head=<rama> -f base=<rama-por-defecto> -F draft=true` (`draft=false` si sale listo) |
 
 ## Etiquetas
 
 Todas en ASCII, para que `gh` no dependa de la codificación de la consola. Antes del primer
-`gh issue create` en un repo, créalas si faltan (`gh label create <nombre> -R <owner/repo>
---color <color> --description <texto> --force`; `--force` no duplica):
+issue en un repo, créalas si faltan (tabla de arriba):
 
 | Etiqueta | Para qué |
 |---|---|
@@ -76,7 +92,7 @@ Sin editar nada en el repo. El único efecto son issues en GitHub y la marca de 
    (leer antes de grepear, citar `fichero:línea`, distinguir "es" de "parece"). Saca la tabla de
    criticidad. Corre además la verificación del repo una vez y apunta cuánto tarda y si pasa: un
    `main` en rojo es un `P0`.
-4. **Sin duplicados.** `gh issue list -R <slug> --label audit --state all --limit 100`. Un
+4. **Sin duplicados.** Lista los issues `audit` del repo (tabla de arriba). Un
    hallazgo que ya tiene issue abierto no se repite (si hay evidencia nueva, se comenta en él);
    uno cerrado como "not planned" no se reabre.
 5. **Issues.** Como mucho cinco por ejecución, los más graves; el resto va en una línea cada uno
@@ -91,7 +107,8 @@ Sin editar nada en el repo. El único efecto son issues en GitHub y la marca de 
      zona caliente es como mínimo `revision`. Migraciones de datos, borrados, despliegue, gate
      del CI, credenciales y dependencias mayores siempre son `decision`. Si es `revision` por una
      elección de producto, el issue dice qué opción aplicará el robot y por qué.
-6. **Marca la rotación**: `python "${CLAUDE_SKILL_DIR}/scripts/pick.py" marcar <repo>`.
+6. **Marca la rotación**: `python "${CLAUDE_SKILL_DIR}/scripts/pick.py" marcar <repo> --root
+   <la misma carpeta de arriba>` (apunta en GitHub, que es lo que ven el PC y la nube).
 7. **Resumen final**, corto: repo auditado, issues creados con su enlace y etiqueta, hallazgos
    sin verificar, y la verificación de `main` (pasa o no, y tiempo).
 
@@ -100,7 +117,7 @@ Sin editar nada en el repo. El único efecto son issues en GitHub y la marca de 
 Un solo issue por ejecución: el de arriba. Si el script dice "NADA QUE ARREGLAR", se dice y se
 termina.
 
-1. **Lee el issue entero** (`gh issue view <n> -R <slug> --comments`). Si un comentario de la
+1. **Lee el issue entero**, con sus comentarios (tabla de arriba). Si un comentario de la
    persona cambia el plan o lo para, manda el comentario.
 2. **Rama y worktree propios** desde `origin`, nunca desde la copia local:
    `git -C <ruta> fetch --prune` y `git -C <ruta> worktree add -b claude/audit-<n>-<slug-corto>
@@ -131,7 +148,7 @@ termina.
 8. **Commit y PR.** Ficheros explícitos (nunca `git add -A`), conventional commit con
    scope en el idioma del repo, con su línea `Co-Authored-By`. `git push -u origin <rama>` (el
    hook `pre-push-verify` vuelve a verificar; si bloquea, se arregla, no se rodea) y
-   `gh pr create --title ... --body-file ...`, con `--draft` salvo que el modo sea `listo` y el
+   abre el PR por REST (tabla de arriba), en draft salvo que el modo sea `listo` y el
    paso 3 y el 7 no lo hayan bajado a draft. El cuerpo lleva: `Closes #<n>`, qué se
    cambió y por qué, la salida del test fallando antes y pasando después, la verificación, lo que
    salió del intento de refutación (marcado "no independiente") y la línea de "Generated with

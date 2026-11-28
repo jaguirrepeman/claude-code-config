@@ -12,9 +12,15 @@ pasen con `--repos`.
                                                  `--max-drafts` PR abiertos, y si su PR sale listo
                                                  (autónomo) o en draft (revisión)
 
-El estado de la rotación vive en `~/.claude/state/mejora.json`. Si se pierde, la rotación empieza
-de nuevo; no es una decisión, solo un turno. Nunca sale con error: la skill que lo llama aborta
-entera si un comando `!` falla.
+`--donde pc|nube` reparte el trabajo (ver `docs/plan-2026-11-nube.md`): `../repos.json` marca los
+repos que van solo en la nube; el resto va en el PC, y la nube los coge solo si el PC no ha pasado
+en las últimas `LATIDO_HORAS` horas. En el PC, cada llamada apunta ese latido.
+
+El estado (rotación y latido) vive en dos variables de Actions del repo `claude-code-config` del
+mismo dueño, para que el PC y la nube vean lo mismo; si no se pueden leer, en
+`~/.claude/state/mejora.json`. Si se pierde, la rotación empieza de nuevo; no es una decisión,
+solo un turno. Todo GitHub va por `gh api` (REST): en la nube el proxy rechaza `gh issue` y
+`gh pr`. Nunca sale con error: la skill que lo llama aborta entera si un comando `!` falla.
 """
 
 from __future__ import annotations
@@ -36,6 +42,11 @@ LABEL_REVIEW = "audit-revision"
 BRANCH_PREFIX = "claude/audit-"
 SEVERITIES = ("P0", "P1", "P2", "P3")
 DEFAULT_STATE = Path.home() / ".claude" / "state" / "mejora.json"
+POLICY_FILE = Path(__file__).resolve().parent.parent / "repos.json"
+STATE_REPO_NAME = "claude-code-config"
+VAR_AUDITED = "MEJORA_AUDITADO"
+VAR_HEARTBEAT = "MEJORA_LATIDO_PC"
+LATIDO_HORAS = 3
 
 
 @dataclass
@@ -93,6 +104,58 @@ def load_state(path: Path) -> dict:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+
+
+def load_policy(path: Path = POLICY_FILE) -> dict[str, str]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if isinstance(v, str) and not k.startswith("_")}
+
+
+def repos_for_place(
+    names: list[str], policy: dict[str, str], where: str, heartbeat: str | None, now: dt.datetime
+) -> list[str]:
+    """Qué repos le tocan a `where`. Un latido ilegible o ausente cuenta como PC no disponible."""
+    cloud_only = [n for n in names if policy.get(n) == "nube"]
+    pc = [n for n in names if n not in cloud_only]
+    if where == "pc":
+        return pc
+    try:
+        last = dt.datetime.fromisoformat(heartbeat) if heartbeat else None
+    except ValueError:
+        last = None
+    pc_alive = last is not None and now - last < dt.timedelta(hours=LATIDO_HORAS)
+    return cloud_only if pc_alive else names
+
+
+def parse_rest_issues(raw: list[dict]) -> list[dict]:
+    """Issues de la API REST con la forma que usa `pick_fix`, sin los PR que la API mezcla."""
+    return [
+        {
+            "number": i["number"],
+            "title": i.get("title", ""),
+            "labels": [{"name": lb["name"]} for lb in i.get("labels", [])],
+            "createdAt": i.get("created_at", ""),
+        }
+        for i in raw
+        if "pull_request" not in i
+    ]
+
+
+def read_var(state_repo: str, name: str) -> str | None:
+    return run(
+        ["gh", "api", f"repos/{state_repo}/actions/variables/{name}", "--jq", ".value"], timeout=TIMEOUT_GH
+    )
+
+
+def write_var(state_repo: str, name: str, value: str) -> bool:
+    base = ["gh", "api", "--silent", "-f", f"name={name}", "-f", f"value={value}"]
+    patch = [*base, "-X", "PATCH", f"repos/{state_repo}/actions/variables/{name}"]
+    if run(patch, timeout=TIMEOUT_GH) is not None:
+        return True
+    return run([*base, "-X", "POST", f"repos/{state_repo}/actions/variables"], timeout=TIMEOUT_GH) is not None
 
 
 def pick_audit(names: list[str], audited: dict[str, str]) -> str | None:
@@ -153,11 +216,10 @@ def gh_json(args: list[str]) -> list[dict] | None:
         return None
 
 
-def cmd_audit(repos: list[Repo], state: dict) -> None:
-    audited = state.get("audited", {})
+def cmd_audit(repos: list[Repo], audited: dict[str, str]) -> None:
     name = pick_audit([r.name for r in repos], audited)
     if name is None:
-        print("Sin repos candidatos (ninguno con .claude/verify-command en la carpeta).")
+        print("Sin repos candidatos (ninguno con .claude/verify-command, o ninguno le toca a este sitio).")
         return
     repo = next(r for r in repos if r.name == name)
     print(f"REPO: {repo.name}")
@@ -174,29 +236,15 @@ def cmd_fix(repos: list[Repo], max_drafts: int) -> None:
     for r in repos:
         # `--label` repetido es Y, no O: una consulta por etiqueta.
         by_label = [
-            gh_json(
-                [
-                    "issue",
-                    "list",
-                    "-R",
-                    r.slug,
-                    "--state",
-                    "open",
-                    "--label",
-                    label,
-                    "--json",
-                    "number,title,labels,createdAt",
-                    "--limit",
-                    "50",
-                ]
-            )
+            gh_json(["api", f"repos/{r.slug}/issues?state=open&labels={label}&per_page=50"])
             for label in (LABEL_AUTONOMOUS, LABEL_REVIEW)
         ]
-        p = gh_json(["pr", "list", "-R", r.slug, "--state", "open", "--json", "headRefName"])
+        p = gh_json(["api", f"repos/{r.slug}/pulls?state=open&per_page=100"])
         if any(i is None for i in by_label) or p is None:
             unavailable.append(r.name)
             continue
-        issues[r.name], prs[r.name] = merge_issue_lists(*by_label), p
+        issues[r.name] = merge_issue_lists(*(parse_rest_issues(i) for i in by_label))
+        prs[r.name] = [{"headRefName": x.get("head", {}).get("ref", "")} for x in p]
     candidates, skipped = pick_fix(issues, prs, max_drafts)
     by_name = {r.name: r for r in repos}
     if candidates:
@@ -232,28 +280,56 @@ def main() -> int:
     )
     parser.add_argument("--state", default=str(DEFAULT_STATE))
     parser.add_argument("--max-drafts", type=int, default=2)
+    parser.add_argument("--donde", choices=["pc", "nube"], default="pc")
+    parser.add_argument(
+        "--state-repo", default=os.environ.get("MEJORA_STATE_REPO", ""), help="owner/claude-code-config"
+    )
+    parser.add_argument("--sin-github", action="store_true", help="estado solo en el fichero local (tests)")
     args = parser.parse_args()
     state_path = Path(args.state)
     state = load_state(state_path)
+
+    root = Path(args.root).resolve()
+    only = [x.strip() for x in args.repos.split(",") if x.strip()]
+    repos = find_repos(root, only) if root.is_dir() else []
+    state_repo = "" if args.sin_github else args.state_repo
+    if not state_repo and not args.sin_github and repos:
+        state_repo = f"{repos[0].slug.split('/')[0]}/{STATE_REPO_NAME}"
+
+    # Lo de GitHub manda sobre el fichero local: es lo que ven a la vez el PC y la nube.
+    audited = dict(state.get("audited", {}))
+    remote = read_var(state_repo, VAR_AUDITED) if state_repo else None
+    try:
+        audited.update(json.loads(remote) if remote else {})
+    except ValueError:
+        pass
 
     if args.mode == "marcar":
         if not args.repo:
             print("marcar necesita el nombre del repo")
             return 0
-        state.setdefault("audited", {})[args.repo] = dt.date.today().isoformat()
+        audited[args.repo] = dt.date.today().isoformat()
+        state["audited"] = audited
         state_path.parent.mkdir(parents=True, exist_ok=True)
         state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        print(f"Apuntado: {args.repo} auditado el {state['audited'][args.repo]}")
+        shared = bool(state_repo) and write_var(state_repo, VAR_AUDITED, json.dumps(audited, sort_keys=True))
+        print(
+            f"Apuntado: {args.repo} auditado el {audited[args.repo]}" + ("" if shared else " (solo en local)")
+        )
         return 0
 
-    root = Path(args.root).resolve()
     if not root.is_dir():
         print(f"No existe la carpeta de repos: {root}")
         return 0
-    only = [x.strip() for x in args.repos.split(",") if x.strip()]
-    repos = find_repos(root, only)
+    now = dt.datetime.now(dt.timezone.utc)
+    heartbeat = read_var(state_repo, VAR_HEARTBEAT) if state_repo else None
+    if args.donde == "pc" and state_repo:
+        write_var(state_repo, VAR_HEARTBEAT, now.isoformat(timespec="seconds"))
+    names = repos_for_place([r.name for r in repos], load_policy(), args.donde, heartbeat, now)
+    print(f"DÓNDE: {args.donde} (último paso del PC: {heartbeat or 'desconocido'})")
+    repos = [r for r in repos if r.name in names]
     if args.mode == "auditar":
-        cmd_audit(repos, state)
+        cmd_audit(repos, audited)
     else:
         cmd_fix(repos, args.max_drafts)
     return 0

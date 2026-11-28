@@ -89,6 +89,34 @@ def test_merge_issue_lists_dedupes_issue_with_both_labels() -> None:
     assert {c.number: c.pr_mode for c in candidates}[2] == "draft"
 
 
+def test_repos_for_place_splits_pc_and_cloud() -> None:
+    # gymapp va solo en la nube; el resto en el PC, y la nube los coge solo si el PC no ha pasado
+    # en las últimas horas. Sin latido (nunca pasó o no se pudo leer) cuenta como viejo.
+    q = _load_pick()
+    names = ["atril", "finance", "gymapp"]
+    policy = {"gymapp": "nube"}
+    now = q.dt.datetime(2026, 11, 28, 14, 30, tzinfo=q.dt.timezone.utc)
+    fresh = "2026-11-28T13:05:00+00:00"
+    stale = "2026-11-28T09:00:00+00:00"
+    assert q.repos_for_place(names, policy, "pc", fresh, now) == ["atril", "finance"]
+    assert q.repos_for_place(names, policy, "nube", fresh, now) == ["gymapp"]
+    assert q.repos_for_place(names, policy, "nube", stale, now) == names
+    assert q.repos_for_place(names, policy, "nube", None, now) == names
+    assert q.repos_for_place(names, policy, "nube", "basura", now) == names
+
+
+def test_parse_rest_issues_drops_pull_requests() -> None:
+    # La API REST de issues devuelve también los PR; no son issues que arreglar.
+    q = _load_pick()
+    raw = [
+        {"number": 3, "title": "a", "labels": [{"name": "P1"}], "created_at": "2026-11-01T00:00:00Z"},
+        {"number": 4, "title": "pr", "labels": [], "created_at": "x", "pull_request": {"url": "u"}},
+    ]
+    assert q.parse_rest_issues(raw) == [
+        {"number": 3, "title": "a", "labels": [{"name": "P1"}], "createdAt": "2026-11-01T00:00:00Z"}
+    ]
+
+
 def test_pick_fix_skips_repo_at_draft_limit() -> None:
     # El freno de PR abiertos: sin él, un sábado tras otro se apilan drafts que nadie revisa.
     q = _load_pick()
@@ -121,7 +149,7 @@ def test_pick_mark_then_audit_rotates(tmp_path: Path) -> None:
 
     def run(*args: str) -> str:
         r = subprocess.run(
-            [PYTHON, script, *args, "--root", str(root), "--state", str(state)],
+            [PYTHON, script, *args, "--root", str(root), "--state", str(state), "--sin-github"],
             capture_output=True,
             timeout=60,
         )
@@ -165,6 +193,7 @@ def test_pick_ignores_worktree_folders(tmp_path: Path) -> None:
             str(root),
             "--state",
             str(tmp_path / "s.json"),
+            "--sin-github",
         ],
         capture_output=True,
         timeout=60,
