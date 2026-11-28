@@ -17,8 +17,10 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(git *)",
             "command": "python \"$HOME/.claude/hooks/block-commit-on-protected.py\"",
-            "timeout": 15
+            "timeout": 15,
+            "onFailure": "block"
           }
         ]
       },
@@ -27,9 +29,11 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(git *)",
             "command": "python \"$HOME/.claude/hooks/pre-push-verify.py\"",
             "timeout": 600,
-            "statusMessage": "Verificación del repo antes del push..."
+            "statusMessage": "Verificación del repo antes del push...",
+            "onFailure": "block"
           }
         ]
       },
@@ -38,8 +42,10 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(git *)",
             "command": "python \"$HOME/.claude/hooks/guard-branch-delete.py\"",
-            "timeout": 30
+            "timeout": 30,
+            "onFailure": "block"
           }
         ]
       }

@@ -591,3 +591,31 @@ def test_action_refs_fails_open_without_network_or_gh(tmp_path: Path, fake_gh: l
     wf = write_workflow(tmp_path, "jobs:\n  t:\n    steps:\n      - uses: astral-sh/setup-uv@v10\n")
     assert check_refs(wf, [*fake_gh, "offline"]) == (0, "")
     assert check_refs(wf, ["no-existe-este-gh"]) == (0, "")
+
+
+# --- settings/hooks.snippet.json ----------------------------------------------------------------
+
+GUARDS = ("block-commit-on-protected.py", "pre-push-verify.py", "guard-branch-delete.py")
+
+
+def test_snippet_guards_fail_closed_only_on_git_commands() -> None:
+    """Las guardas bloquean si no llegan a decidir, pero solo ante comandos git.
+
+    `onFailure: "block"` sin `if` haría que un Python roto bloquease todo Bash, así que los dos
+    campos van juntos. Y un hook informativo con `onFailure: "block"` rompería la regla de
+    fallar abierto.
+    """
+    snippet = json.loads((HOOKS.parent / "settings" / "hooks.snippet.json").read_text(encoding="utf-8"))
+    seen = set()
+    for event, groups in snippet["hooks"].items():
+        for group in groups:
+            for handler in group["hooks"]:
+                guard = next((g for g in GUARDS if g in handler["command"]), None)
+                if guard:
+                    seen.add(guard)
+                    assert event == "PreToolUse", guard
+                    assert handler.get("if") == "Bash(git *)", guard
+                    assert handler.get("onFailure") == "block", guard
+                else:
+                    assert "onFailure" not in handler, handler["command"]
+    assert seen == set(GUARDS)

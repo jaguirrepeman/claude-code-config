@@ -86,7 +86,19 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
   que tarda se acaba apagando. Sobre un fichero es sub-segundo.
 - **Los hooks fallan abiertos, devuelven la salida del fallo y nunca salen con error.** Son
   las tres reglas de diseño de `docs/ways-of-working.md`, sección 7. Cualquier hook nuevo las
-  sigue.
+  sigue. La excepción son las tres guardas de `PreToolUse` (commit en la rama protegida, push y
+  borrado de ramas): llevan `"onFailure": "block"` (Claude Code 2.1.295 o posterior), así que
+  si el script no arranca o agota su tiempo, la acción se bloquea en vez de pasar. El fallo
+  abierto sigue valiendo para lo que el script decide por dentro; `onFailure` solo cubre que
+  el script ni siquiera llegue a decidir.
+- **Las guardas solo arrancan ante comandos con `git`.** Llevan `"if": "Bash(git *)"`, que
+  Claude Code comprueba subcomando a subcomando (casa también `cd ../otro && git commit`), así
+  que un `ls` o un `uv run` no paga el arranque de tres Python. Medido el 2026-11-28: cada
+  guarda costaba entre 0,6 y 1,8 s en cada llamada a Bash. Sin el `if`, `onFailure: "block"`
+  sería peligroso: un Python roto bloquearía todo Bash, no solo git.
+- **`git add -A`, `--all` y `git add .` están en `deny`.** "Nunca `git add -A`" era solo una
+  línea de `CLAUDE.md`; la guía oficial pide que lo que debe cumplirse siempre vaya en un
+  `deny` o en un hook. La regla no cubre formas raras como `git -C otro add -A`.
 - **El bloqueo de commit es de sesión, no de servidor.** Impide que una sesión de Claude Code
   commitee en la rama protegida; no impide hacerlo a mano. Para eso está la protección de rama
   del remoto. Se puede fijar la rama con `CLAUDE_PROTECTED_BRANCHES=main,release`.
@@ -120,9 +132,15 @@ del repo" al arrancar. Para comprobar que los hooks hacen lo que dicen, en este 
   mensaje de cierre deja pendientes sin issue: el fallo real era archivar el hilo con "quedan X e
   Y" y perderlos. Bloquea una vez (`stop_hook_active`) y falla abierto. `CLAUDE_SKIP_PENDING_GUARD=1`
   lo apaga para una sesión.
-- **`/deploy-pi` lleva `disable-model-invocation: true`.** Desplegar tiene efectos fuera de la
-  máquina; lo lanza la persona con `/deploy-pi`, nunca el modelo por su cuenta. Es lo que la
-  documentación recomienda para skills con efectos secundarios.
+- **`/deploy-pi` y `/mejora` llevan `disable-model-invocation: true`.** Desplegar tiene
+  efectos fuera de la máquina, y `/mejora` abre PR que el gate fusiona y despliega solo; las
+  lanza la persona o la tarea programada escribiendo `/deploy-pi` o `/mejora ...`, nunca el
+  modelo por su cuenta. Es lo que la documentación recomienda para skills con efectos
+  secundarios, y además saca su descripción del contexto de cada sesión.
+- **`repo-auditor` lleva `omitClaudeMd: true`.** Es de solo lectura y saca lo que necesita del
+  encargo; las reglas de git y de texto de `CLAUDE.md` y `machine.md` no le hacen falta, y la
+  sesión principal, que sí las tiene, es quien redacta a partir de su informe. `verifier` sí
+  carga `CLAUDE.md`, porque comprueba que un cambio lo cumple.
 
 ## Gate de auto-merge: nadie revisa a mano
 
