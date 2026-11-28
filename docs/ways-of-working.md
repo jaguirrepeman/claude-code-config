@@ -269,13 +269,16 @@ Es el flujo oficial recomendado y el que menos retrabajo genera:
 Cuándo saltarse los pasos 1 y 2: la tarea cabe en una frase y toca pocos ficheros de una zona
 que conoces (renombrar, un log, un texto de la interfaz).
 
-### 4.2 Plan mode obligatorio en las zonas calientes
+### 4.2 Plan escrito en las zonas calientes
 
 Hay ficheros donde un error no rompe el build, sino que cambia un número que alguien va a mirar.
-En esos se activa plan mode (2.3) y no se aprueba nada sin leer el plan. Cada proyecto tiene los
-suyos; lo importante es que estén **escritos** en su `CLAUDE.md`, no que se sepan.
+En esos el plan se escribe antes de tocar nada, el test se ve fallar y `/refute` revisa el cambio
+antes del PR. Hasta el 2026-11-28 además se esperaba a que la persona aprobase el plan; desde
+entonces solo espera si toca una base de datos o cambia el comportamiento de forma radical
+(`CLAUDE.md`, "Autonomía"). Cada proyecto tiene sus zonas; lo importante es que estén
+**escritas** en su `CLAUDE.md`, no que se sepan.
 
-Para el resto (interfaz, documentos, scripts auxiliares), plan mode es opcional.
+Para el resto (interfaz, documentos, scripts auxiliares), el plan escrito es opcional.
 
 ### 4.3 Prompts con criterio de aceptación
 
