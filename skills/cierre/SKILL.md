@@ -1,6 +1,6 @@
 ---
 name: cierre
-description: Check de fin de hilo. Recoge los pendientes de la conversación y los convierte en issues del repo (con confirmación), comprueba que no queda nada sin commitear, sin pushear ni sin fusionar, y da el veredicto ARCHIVABLE o NO ARCHIVABLE con pruebas. Úsalo cuando el usuario diga "hemos terminado", "ciérralo", "ya está", "¿se puede archivar?" o invoque /cierre.
+description: Check de fin de hilo. Recoge los pendientes de la conversación y los convierte en issues del repo, comprueba que no queda nada sin commitear, sin pushear ni sin fusionar, y da el veredicto ARCHIVABLE o NO ARCHIVABLE con pruebas. Úsalo cuando el usuario diga "hemos terminado", "ciérralo", "ya está", "¿se puede archivar?" o invoque /cierre.
 user-invocable: true
 argument-hint: [--sin-issues]
 allowed-tools: Bash(git status *), Bash(git branch *), Bash(git rev-list *), Bash(git worktree list *), Bash(git fetch *), Bash(gh pr list *), Bash(gh pr view *), Bash(gh issue list *)
@@ -37,9 +37,9 @@ Para cada uno: título corto, y cuerpo con el contexto que hará falta al retoma
 de donde sale, qué falta exactamente, por qué se dejó, cómo se verifica). Si ya existe un issue
 abierto que lo cubre (lista de arriba), se referencia, no se duplica.
 
-**Enseña la lista y espera el OK antes de crear nada.** Con el OK, un `gh issue create --title
-... --body ...` por pendiente, y pega las URL. Con `--sin-issues` en `$ARGUMENTS`, o si el usuario
-dice que no, los pendientes se dejan listados en el mensaje final marcados como "NO guardados":
+**Créalos sin esperar** (un issue se cierra con un clic; ver "Autonomía" en `~/.claude/CLAUDE.md`):
+un `gh issue create --title ... --body ...` por pendiente, y pega las URL. Con `--sin-issues` en
+`$ARGUMENTS`, o si el usuario lo ha pedido así, los pendientes se dejan listados en el mensaje final marcados como "NO guardados":
 el hilo no es archivable en ese caso. Si no hay pendientes, escríbelo con estas palabras: "sin
 pendientes que guardar".
 
