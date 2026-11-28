@@ -18,14 +18,18 @@ $ARGUMENTS
 ```!
 git branch --show-current 2>/dev/null || echo "(no es un repo git)"
 git status --short 2>/dev/null | head -30
-echo "--- base: $(git merge-base HEAD origin/HEAD 2>/dev/null || git rev-parse HEAD~1 2>/dev/null || echo '?') ---"
-git diff --stat "$(git merge-base HEAD origin/HEAD 2>/dev/null || git rev-parse HEAD~1 2>/dev/null || echo HEAD)" 2>/dev/null | tail -40 || true
+git worktree list 2>/dev/null
+git rev-parse -q --verify origin/main >/dev/null && git diff --stat origin/main...HEAD | tail -40 || git diff --stat HEAD~1 2>/dev/null | tail -40 || true
 ```
 
 ## Diff de la rama frente a la base (automático, recortado)
 
+La base es el punto en que la rama sale de `origin/main`: el diff de tres puntos la calcula solo.
+Sin `origin/main` (un repo con otra rama principal), se compara contra el commit anterior. No
+se usa `origin/HEAD`: un clon sin `git remote set-head` no lo tiene.
+
 ```!
-git diff "$(git merge-base HEAD origin/HEAD 2>/dev/null || git rev-parse HEAD~1 2>/dev/null || echo HEAD)" 2>/dev/null | head -c 60000 || true
+git rev-parse -q --verify origin/main >/dev/null && git diff origin/main...HEAD | head -c 60000 || git diff HEAD~1 2>/dev/null | head -c 60000 || true
 ```
 
 ## Cambios sin commitear (automático, recortado)
@@ -33,6 +37,10 @@ git diff "$(git merge-base HEAD origin/HEAD 2>/dev/null || git rev-parse HEAD~1 
 ```!
 git diff HEAD 2>/dev/null | head -c 20000 || true
 ```
+
+Los bloques automáticos se ejecutan en el directorio de la sesión. Si el cambio vive en otro
+worktree (la lista de arriba) y el criterio da su ruta, los diffs de arriba no son los suyos:
+pídelos con `git -C <ruta> diff origin/main...HEAD`.
 
 Si un diff aparece recortado, vuelve a pedirlo entero por ficheros con `git diff <base> -- <ruta>`.
 Sigue el procedimiento y el formato de tu definición de agente. Termina con el bloque VEREDICTO.

@@ -16,10 +16,10 @@ se archiva con el hilo. Este es el orden: primero guardar los pendientes, despuÃ
 
 ```!
 git fetch --prune --quiet 2>/dev/null || true
-echo "rama: $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+echo "--- rama"; git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'
 echo "--- sin commitear"; git status --porcelain 2>/dev/null || true
 echo "--- por delante / por detrÃ¡s del upstream"; git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || echo "(sin upstream)"
-echo "--- PR de esta rama"; gh pr list --head "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" --state all --limit 3 --json number,state,isDraft,url --jq '.[] | "#\(.number) \(.state) draft=\(.isDraft) \(.url)"' 2>/dev/null || echo "(gh no disponible)"
+echo "--- PR de esta rama"; gh pr view --json number,state,isDraft,url --jq '"#\(.number) \(.state) draft=\(.isDraft) \(.url)"' 2>/dev/null || echo "(sin PR o gh no disponible)"
 echo "--- worktrees"; git worktree list 2>/dev/null || true
 echo "--- issues abiertos del repo"; gh issue list --state open --limit 20 --json number,title --jq '.[] | "#\(.number) \(.title)"' 2>/dev/null || echo "(gh no disponible)"
 ```
