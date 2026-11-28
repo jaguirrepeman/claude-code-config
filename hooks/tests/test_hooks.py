@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -619,3 +620,16 @@ def test_snippet_guards_fail_closed_only_on_git_commands() -> None:
                 else:
                     assert "onFailure" not in handler, handler["command"]
     assert seen == set(GUARDS)
+
+
+def test_push_hook_timeout_does_not_wait_for_grandchildren(repo: Path) -> None:
+    # La verificación corre con `shell=True`: el pytest de verdad es nieto del hook. Al vencer
+    # el tiempo, `subprocess.run` mataba solo el shell y se quedaba esperando a que el nieto
+    # cerrase la tubería de salida (unos 20 minutos con la suite de portfolio_tracker). Claude
+    # Code cortaba el hook a los 600 s y, con `onFailure: block`, el push no salía nunca (28-11-2026).
+    write_verify(repo, f'"{PYTHON}" -c "import time; time.sleep(30)"')
+    env = {"CLAUDE_VERIFY_TIMEOUT": "1"}
+    inicio = time.monotonic()
+    code, out = run_hook("pre-push-verify.py", bash("git push", repo), repo, env)
+    assert (code, out) == (0, "")
+    assert time.monotonic() - inicio < 15
