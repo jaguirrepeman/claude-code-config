@@ -37,6 +37,9 @@ un repo desechable en `/tmp`:
   bloqueado con el mensaje de `block-commit-on-protected.py`.
 - La lista `deny` fusionada igual no se aplica en caliente: `git add -A` siguió pasando.
 - `python` existe (`/usr/local/bin/python`), así que `onFailure: "block"` no cierra git.
+- La recarga no es inmediata: en una segunda prueba (16:41 UTC) un commit en `main` un segundo
+  después de fusionar entró, y los de 21 y 45 segundos después salieron bloqueados. Por eso
+  `merge_guards.py` espera 25 segundos tras escribir antes de devolver el control.
 
 Por eso las dos tareas corren `python3 settings/merge_guards.py` justo después de `install.sh`.
 Solo `PreToolUse`: los hooks de `PostToolUse` y `Stop` no protegen git y cambiarían una tarea

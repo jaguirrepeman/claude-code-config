@@ -635,9 +635,9 @@ def test_push_hook_timeout_does_not_wait_for_grandchildren(repo: Path) -> None:
     assert time.monotonic() - inicio < 15
 
 
-def run_merge_guards(config_dir: Path) -> str:
+def run_merge_guards(config_dir: Path, *args: str) -> str:
     r = subprocess.run(
-        [PYTHON, str(HOOKS.parent / "settings" / "merge_guards.py")],
+        [PYTHON, str(HOOKS.parent / "settings" / "merge_guards.py"), "--wait", "0", *args],
         capture_output=True,
         env={**os.environ, "CLAUDE_CONFIG_DIR": str(config_dir)},
         timeout=60,
@@ -663,4 +663,17 @@ def test_merge_guards_never_touches_a_settings_file_with_hooks(tmp_path: Path) -
     (tmp_path / "settings.json").write_text(existing, encoding="utf-8")
     out = run_merge_guards(tmp_path)
     assert (tmp_path / "settings.json").read_text(encoding="utf-8") == existing
+    assert "sin cambios" in out
+
+
+def test_merge_guards_waits_for_the_hot_reload_after_writing(tmp_path: Path) -> None:
+    # En la nube la recarga en caliente tardó entre 1 y 21 s: un commit en main un segundo
+    # después de fusionar todavía entró (28-11-2026). El script no vuelve hasta pasada la espera.
+    inicio = time.monotonic()
+    out = run_merge_guards(tmp_path, "--wait", "2")
+    assert time.monotonic() - inicio >= 2
+    assert "guardas activas" in out
+    inicio = time.monotonic()
+    out = run_merge_guards(tmp_path, "--wait", "2")
+    assert time.monotonic() - inicio < 2
     assert "sin cambios" in out
