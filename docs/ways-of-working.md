@@ -609,6 +609,14 @@ prueba de que algo falla), **devuelven la salida del fallo, no un "falló"** (el
 el mensaje de ruff o el traceback para arreglarlo sin volver a ejecutar), y **nunca salen con
 error** (un problema en el hook no puede dejar la sesión atrapada).
 
+Las tres guardas de `PreToolUse` (commit en la rama protegida, push, borrado de ramas) son la
+excepción a la primera regla en un punto concreto: si el script ni siquiera llega a decidir
+(Python no arranca, se cuelga, agota el tiempo), Claude Code por defecto deja pasar la acción,
+y una guarda que se cae en silencio da por cubierto algo que no lo está (principio 6). Por eso
+llevan `"onFailure": "block"`, y siempre junto a `"if": "Bash(git *)"`, para que el bloqueo
+alcance solo a los comandos git y no a todo Bash. Lo que el script decide por dentro sigue
+siendo fallo abierto, salvo `guard-branch-delete`, que ya preguntaba si no podía comprobar.
+
 Cosas aprendidas que conviene no repetir:
 
 - **Un `git pull` automático al arrancar es mala idea.** Si estás a mitad de un cambio, o falla o

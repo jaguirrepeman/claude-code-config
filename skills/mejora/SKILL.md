@@ -2,6 +2,7 @@
 name: mejora
 description: Mejora continua programada de los repos. `auditar` audita el repo al que le toca turno y convierte los hallazgos en issues; `arreglar` coge el issue `audit-autonomo` o `audit-revision` más grave, lo arregla con su test de regresión y abre un PR (listo si es autónomo, para que lo fusione el gate; en draft si necesita un vistazo). Úsala solo cuando la pida explícitamente `/mejora` o una tarea programada que la nombre; "mejora este código" en una sesión normal no es esto.
 user-invocable: true
+disable-model-invocation: true
 argument-hint: auditar|arreglar [--root carpeta] [--donde pc|nube] [--repos a,b] [--max-drafts N]
 allowed-tools: Bash(python ${CLAUDE_SKILL_DIR}/scripts/pick.py *)
 ---
