@@ -38,9 +38,11 @@ Lo que depende de la máquina (shell, red, herramientas instaladas) no va aquí:
   comprobado de lo supuesto. Las restricciones fijas de un proyecto viven en el `CLAUDE.md` de
   su repo y se releen antes de planificar. Un diseño sobre una estructura imaginada se rehace
   entero cuando aparece la real.
-- **Plan mode en zonas calientes.** Donde un error no rompe el build sino que cambia un número
-  que alguien va a mirar (cálculo, precio, medición), plan mode y no aprobar nada sin leer el
-  plan. Cada repo dice cuáles son sus zonas calientes.
+- **Plan escrito en zonas calientes.** Donde un error no rompe el build sino que cambia un
+  número que alguien va a mirar (cálculo, precio, medición), plan escrito antes de tocar nada
+  (criterio, ficheros, qué no se toca), test visto fallar y `/refute` antes del PR. El plan no
+  espera aprobación salvo que toque una base de datos o cambie el comportamiento de forma
+  radical (ver Autonomía). Cada repo dice cuáles son sus zonas calientes.
 - **El plan de un cambio grande se escribe en un fichero** (objetivo, criterio de aceptación,
   ficheros que se tocan, qué se decide no hacer) antes de escribir código, si va a durar más de
   una sesión o el entorno puede cortar la sesión a medias.
