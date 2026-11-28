@@ -216,3 +216,31 @@ def test_pick_ignores_worktree_folders(tmp_path: Path) -> None:
     )
     out = r.stdout.decode("utf-8")
     assert "ROTACIÓN: bot=nunca" in out and "bot-map" not in out, out
+
+
+def _bloques_automaticos(skill_md: Path) -> list[str]:
+    """Los bloques ```! de una skill: Claude Code los ejecuta solo al invocarla."""
+    bloques, dentro, actual = [], False, []
+    for linea in skill_md.read_text(encoding="utf-8").splitlines():
+        if not dentro and linea.strip() == "```!":
+            dentro, actual = True, []
+        elif dentro and linea.strip() == "```":
+            dentro = False
+            bloques.append("\n".join(actual))
+        elif dentro:
+            actual.append(linea)
+    return bloques
+
+
+def test_automatic_skill_blocks_do_not_use_command_substitution() -> None:
+    # Un `$(...)` en un bloque ```! hace fallar la comprobación de permisos al invocar la
+    # skill: /refute no arrancaba ("Shell command permission check failed", 27-11-2026) y
+    # /cierre no ejecutaba su bloque. Sin sustituciones, los dos arrancan.
+    malos = [
+        f"{skill.parent.name}: {linea.strip()}"
+        for skill in sorted((REPO / "skills").glob("*/SKILL.md"))
+        for bloque in _bloques_automaticos(skill)
+        for linea in bloque.splitlines()
+        if "$(" in linea
+    ]
+    assert not malos, "\n".join(malos)

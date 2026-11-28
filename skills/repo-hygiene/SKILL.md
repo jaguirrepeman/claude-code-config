@@ -19,7 +19,7 @@ sin red o un repo sin remoto no deben impedir ver el resto.
 
 ```!
 git fetch --prune --quiet 2>/dev/null || true
-echo "rama protegida: $(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#origin/##' || echo main)"
+echo "--- rama protegida (origin/HEAD; si sale vacío, main)"; git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true
 echo "--- ramas locales (vv)"; git branch -vv 2>/dev/null || true
 echo "--- ramas remotas"; git branch -r 2>/dev/null | grep -v HEAD || true
 echo "--- worktrees"; git worktree list 2>/dev/null || true
