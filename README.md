@@ -71,7 +71,7 @@ juntar los dos bloques en un fichero nuevo. Si `~/.claude/settings.json` ya tien
 En la nube (las tareas de `/mejora`) no hay nadie para fusionarlo: justo después de `install.sh`
 corren `python3 settings/merge_guards.py`, que escribe las tres guardas de `PreToolUse` y la
 lista `deny` en un `settings.json` sin hooks y no toca uno que ya los tenga. Los hooks se cargan
-en caliente; la lista `deny` no, así que en la nube `git add -A` no queda bloqueado (probado el
+en caliente, con hasta unos 20 segundos de retraso, así que el script espera 25 antes de volver; la lista `deny` no, así que en la nube `git add -A` no queda bloqueado (probado el
 2026-11-28, ver `docs/plan-2026-11-nube.md`).
 
 Requisitos de los hooks: `python` en el PATH (3.10 o superior). Los comandos usan `$HOME`, que
