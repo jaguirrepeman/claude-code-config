@@ -105,6 +105,22 @@ def test_repos_for_place_splits_pc_and_cloud() -> None:
     assert q.repos_for_place(names, policy, "nube", "basura", now) == names
 
 
+def test_state_lives_in_issue_body_and_survives_a_round_trip() -> None:
+    # La nube no puede leer las variables de Actions (probado el 2026-11-28: vio el latido como
+    # "desconocido" teniéndolo), pero sí issues. El estado va en el cuerpo de un issue, en JSON.
+    q = _load_pick()
+    state = {
+        "audited": {"atril": "2026-11-01", "gymapp": "2026-11-28"},
+        "latido_pc": "2026-11-28T11:58:13+00:00",
+    }
+    body = q.render_state_body(state)
+    assert "No lo edites a mano" in body
+    assert q.parse_state_body(body) == state
+    assert q.parse_state_body("") == {}
+    assert q.parse_state_body("texto sin json") == {}
+    assert q.parse_state_body("```json\n{roto\n```") == {}
+
+
 def test_parse_rest_issues_drops_pull_requests() -> None:
     # La API REST de issues devuelve también los PR; no son issues que arreglar.
     q = _load_pick()

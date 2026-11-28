@@ -20,15 +20,19 @@ sin probar todavía:
 - Ubuntu con uv, pytest, ruff, Node y gh. Deno no viene: gymapp lo necesita para verificar.
 - Gasta de la suscripción igual que una sesión normal. Como mucho una ejecución por hora.
 
-Comprobado aquí: `gh api repos/<owner>/claude-code-config/actions/variables` responde (0
-variables el 2026-11-28).
+Comprobado en la primera ejecución de prueba en la nube (2026-11-28, 12:04 UTC, PR atril#178):
+
+- Clona los 8 repos en `/home/user/<repo>`, `install.sh` funciona y deja la skill instalada.
+- `gh api` por REST lee issues y PR, y crea el PR: funciona.
+- Las variables de Actions **no** se leen desde la nube: el latido salió "desconocido" cuando
+  existía, y la nube cogió atril, que era del PC. Por eso el estado pasó a un issue.
 
 ## Diseño
 
-- **Estado en GitHub, no en un fichero del PC.** Dos variables de Actions de este repo (no se
-  ven desde fuera aunque el repo sea público): `MEJORA_AUDITADO` (JSON con la fecha de la última
-  auditoría de cada repo, lo que antes era `~/.claude/state/mejora.json`) y `MEJORA_LATIDO_PC`
-  (cuándo pasó el PC por última vez). Si no se pueden leer, se usa el fichero local como antes.
+- **Estado en GitHub, no en un fichero del PC.** En el cuerpo de un issue abierto con la
+  etiqueta `mejora-estado` en este repo (#41): la fecha de la última auditoría de cada repo (lo
+  que antes era `~/.claude/state/mejora.json`) y cuándo pasó el PC por última vez. Si no se puede
+  leer, se usa el fichero local como antes, y el PC no escribe a ciegas.
 - **Reparto** en `skills/mejora/repos.json`: `"nube"` (solo la nube) o, por defecto, `"pc"`
   (el PC, con la nube de respaldo).
 - `pick.py --donde pc` apunta el latido y salta los repos `nube`. `pick.py --donde nube` coge los
